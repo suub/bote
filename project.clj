@@ -1,5 +1,5 @@
 (defproject suub/bote "0.1.0-SNAPSHOT"
-  :jvm-opts ["-Xmx4g"]
+  :jvm-opts ["-Xmx8g"]
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -10,9 +10,7 @@
                  [org.clojure/tools.reader "0.7.10"]
                  [midje "1.5.1"]
                  [com.taoensso/timbre "2.6.2"]
-                 [cascalog/cascalog-core "2.0.0"]
-                 [cascalog/cascalog-more-taps "2.0.1-SNAPSHOT"]
-                 ;[cascalog/cascalog-checkpoint "0.2.0"]
+                 [org.clojars.r0man/clj-spark "0.1.0-SNAPSHOT"]
                  [me.raynes/laser "2.0.0-SNAPSHOT"]
                  [pandect "0.3.0"]]
   :profiles {:dev
