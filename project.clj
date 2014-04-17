@@ -10,9 +10,11 @@
                  [org.clojure/tools.reader "0.7.10"]
                  [midje "1.5.1"]
                  [com.taoensso/timbre "2.6.2"]
-                 [org.clojars.r0man/clj-spark "0.1.0-SNAPSHOT"]
                  [me.raynes/laser "2.0.0-SNAPSHOT"]
-                 [pandect "0.3.0"]]
+                 [pandect "0.3.0"]
+                 [org.clojars.r0man/clj-spark "0.1.0-SNAPSHOT"]
+                 [org.apache.spark/spark-core_2.10 "0.9.0-incubating"]
+                 [org.apache.spark/spark-streaming_2.10 "0.9.0-incubating"]]
   :profiles {:dev
              {:dependencies [[org.apache.hadoop/hadoop-core "1.1.2"]
                              [cascalog/midje-cascalog "2.0.0"]]
