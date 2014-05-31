@@ -6,11 +6,11 @@
             [clojure.tools.reader.edn :as edn]
             [clojure.string :as string]))
 
-(def builtin-dict-path "dta-freq.d/dta-full.fuw")
 (defn builtin-dict []
-  (let [raw (.getPath (clojure.java.io/resource builtin-dict-path))
-        ]))
-
+  (-> "dictionary.edn"
+      clojure.java.io/resource
+      slurp
+      edn/read-string))
 
 (defn index
   "Takes a transformation map and a collection of words,
