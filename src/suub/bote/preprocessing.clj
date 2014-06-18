@@ -1,7 +1,8 @@
 (ns suub.bote.preprocessing
   (:require [taoensso.timbre :refer [spy debug info error]]
             [clojure.java.io :as io]
-            [clojure.core.reducers :as r]))
+            [clojure.core.reducers :as r]
+            [error-codes.core :as ecodes]))
 
 (defn- count-to-frequency
   "Takes a collection of tuples of the form [word count],
@@ -39,3 +40,22 @@
       (spit out
             (str header
                  (pr-str (read-dict lines)))))))
+
+(defn build-error [a b error-code]
+  (cond
+   (= 2 (count error-code)) (do (println error-code)(let [[code [l r]] error-code] {(str (nth a l))
+                                                                                    (str (nth b r))}))
+   (= 7 (get-in error-code [0 1])) (let [[code [ls rs] [le re]] error-code] {(subs a ls le)
+                                                                             (subs b rs (inc re))})
+   (= 7 (get-in error-code [0 0])) (let [[code [ls rs] [le re]] error-code] {(subs a ls (inc le))
+                                                                             (subs b rs re)})))
+
+(defn build-errors [a b]
+  (->> (ecodes/error-codes a b)
+       (remove #(some #{8} (first %)))
+       (map (partial build-error a b))))
+
+
+(build-errors "iii" "m")
+
+(apply merge-with vector [{"u" "n"} {"u" "ii"}])

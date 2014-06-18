@@ -12,6 +12,12 @@
       slurp
       edn/read-string))
 
+(defn builtin-substs []
+  (-> "substitutions.edn"
+      clojure.java.io/resource
+      slurp
+      edn/read-string))
+
 (defn index
   "Takes a transformation map and a collection of words,
   and returns a lazily computed index for using with `lookup`."
@@ -83,3 +89,7 @@
       [["nu" ...prob... 0.9 [{:from "u" :to "n" :subst-prob 0.9}
                              {:from "u" :to "u" :subst-prob 1}]]])
 
+(def dict (builtin-dict))
+(def subst (builtin-substs))
+
+(spit "resources/index.edn" (pr-str (index subst dict)))

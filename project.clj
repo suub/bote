@@ -12,7 +12,8 @@
                  [midje "1.5.1"]
                  [com.taoensso/timbre "2.6.2"]
                  [me.raynes/laser "2.0.0-SNAPSHOT"]
-                 [pandect "0.3.0"]]
+                 [pandect "0.3.0"]
+                 [suub/error-codes "0.1.0"]]
   :resource-paths ["resources"]
   :profiles {:dev
              {:dependencies [[org.apache.hadoop/hadoop-core "1.1.2"]
