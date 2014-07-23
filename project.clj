@@ -9,7 +9,6 @@
                  [org.clojure/math.numeric-tower "0.0.2"]
                  [org.clojure/tools.reader "0.7.10"]
                  [org.clojure/data.csv "0.1.2"]
-                 [midje "1.5.1"]
                  [com.taoensso/timbre "2.6.2"]
                  [me.raynes/laser "2.0.0-SNAPSHOT"]
                  [pandect "0.3.0"]

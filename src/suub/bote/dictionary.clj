@@ -1,6 +1,6 @@
 (ns suub.bote.dictionary
   (:require [suub.bote.util :as util]
-            [midje.sweet :refer :all]
+            [clojure.test :as t]
             [taoensso.timbre :as log]
             [clojure.java.io :as io]
             [clojure.tools.reader.edn :as edn]
@@ -37,15 +37,14 @@
     {:transformations transformations
      :index (index-worker words)}))
 
-(fact (index {"u" {"n" 1}}
-              #{["uu" ...prob-1...] ["nn" ...prob-2...]})
-      =>
-      {:transformations {"u" {"n" 1}}
-       :index [{:token "u"
-                :word-prob nil
-                :next [{:token "u"
-                        :word-prob ...prob-1...
-                        :next []}]}]})
+(t/is (= (index {"u" {"n" 1}}
+                {"uu" 'prob "nn" 'prob2})
+         {:transformations {"u" {"n" 1}}
+          :index [{:token "u"
+                   :word-prob nil
+                   :next [{:token "u"
+                           :word-prob 'prob
+                           :next []}]}]}))
 
 (defn lookup
   "Expects:
@@ -63,33 +62,58 @@
                   [subst subst-prob] (transformations to)
                   :let [[from rest :as matched] (matcher subst sub-query)]
                   :when matched
-                  [word word-prob
-                   subst-prob-sum walk] (or (seq (lookup-worker next rest))
-                                            (when (and (empty? rest) subst-prob)
-                                              [["" word-prob 1 nil]]))]
-              [(str to word)
-               word-prob
-               (* subst-prob-sum subst-prob)
-               (cons {:from from :to to :subst-prob subst-prob} walk)]))]
-    (lookup-worker index query)))
+                  match (or (seq (lookup-worker next rest))
+                            (when (and (empty? rest) word-prob)
+                              [{:word ""
+                                :word-prob word-prob
+                                :subst-prob 1
+                                :substs nil}]))]
+              (-> match
+                  (update-in [:word] #(str to %))
+                  (update-in [:subst-prob] #(* % subst-prob))
+                  (update-in [:substs] #(cons {:from from :to to :prob subst-prob} %)))))]
+    (map #(assoc % :prob
+                 (* (:word-prob %)
+                    (:subst-prob %)))
+         (lookup-worker index query))))
 
-(fact (lookup
-       (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
-       {:transformations {"n" {"n" 1
-                               "u" 0.9}
-                          "u" {"u" 1
-                               "n" 0.9}}
-        :index [{:token "n"
-                 :word-prob nil
-                 :next [{:token "u"
-                         :word-prob ...prob...
-                         :next []}]}]}
-       "uu")
-      =>
-      [["nu" ...prob... 0.9 [{:from "u" :to "n" :subst-prob 0.9}
-                             {:from "u" :to "u" :subst-prob 1}]]])
+(t/is (= (lookup
+          (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
+          {:transformations {"n" {"n" 1/2
+                                  "u" 1/2}
+                             "u" {"u" 1/2
+                                  "n" 1/2}}
+           :index [{:token "n"
+                    :word-prob nil
+                    :next [{:token "u"
+                            :word-prob 1/3
+                            :next []}]}]}
+          "uu")
+         [{:word "nu"
+           :prob 1/12
+           :word-prob 1/3
+           :subst-prob 1/4
+           :substs [{:from "u" :to "n" :prob 1/2}
+                    {:from "u" :to "u" :prob 1/2}]}]))
 
 (def dict (builtin-dict))
 (def subst (builtin-substs))
+(def idx (index subst dict))
+(def l (lookup (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
+               idx
+               "Fig."))
 
-(spit "resources/index.edn" (pr-str (index subst dict)))
+(defn difficult-word [idx]
+  (fn [w]
+    (if-let [l (not-empty
+                (sort-by :prob >
+                         (lookup (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
+                                 idx
+                                 w)))]
+      (when (not= w (:word (first l)))
+        [w
+         (first (filter #(= w (:word %)) l))
+         (take 5 l)])
+      [w nil])))
+
+(def difficult-words (remove nil? (map (difficult-word idx) (map first dict))))
