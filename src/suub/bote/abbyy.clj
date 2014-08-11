@@ -1,5 +1,6 @@
 (ns suub.bote.abbyy
   (:require [taoensso.timbre :refer [spy debug info error]]
+            [suub.bote.util :as util]
             [clojure.zip :as zip]
             [me.raynes.laser :as l]
             [midje.sweet :refer :all]
@@ -30,7 +31,7 @@
   "Returns a laser selector that selects elements that are
    withing the provided collection of zones."
   [zones]
-  (fn [loc] (boolean (((set zones) (-> loc zip/node zone)))))
+  (fn [loc] (boolean (((set zones) (-> loc zip/node zone))))))
 
 (defn page-info
   "Extracts page metadata."
