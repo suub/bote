@@ -251,25 +251,24 @@ visualized
 ;;in the repository of the ocr-visiaulizer.
 ;;we can now build the whole substitution map
 
-(comment
-  (defn get-files-sorted [dir]
-    (->> (file-seq (io/file dir))
-         rest
-         (sort-by #(.getName  %))))
+(defn get-files-sorted [dir]
+  (->> (file-seq (io/file dir))
+       rest
+       (sort-by #(.getName  %))))
 
-  (defn create-substitution []
-    (let [gts (get-files-sorted "/home/kima/programming/ocr-visualizer/resources/public/ground-truth/")
-          ocr-res (get-files-sorted "/home/kima/programming/ocr-visualizer/resources/public/ocr-results/")
-          error-codes (get-files-sorted "/home/kima/programming/ocr-visualizer/resources/public/edits/")
-          ocr-text (apply str (map slurp ocr-res))
-          errors (for [[gt ocr codes] (map (fn [gf of cf]
-                                             [(slurp gf) (slurp of)
-                                              (read-string (slurp cf))])
-                                           gts ocr-res error-codes)]
-                   (visualize-errors gt ocr codes))
-          errors (apply concat errors)]
-      (prn "start-building")
-      (build-substitution-map errors ocr-text))))
+(defn create-substitution [base-directory]
+  (let [gts (get-files-sorted (io/file base-directory "ground-truth"))
+        ocr-res (get-files-sorted (io/file base-directory "ocr-results"))
+        error-codes (get-files-sorted (io/file base-directory "edits"))
+        ocr-text (apply str (map slurp ocr-res))
+        errors (for [[gt ocr codes] (map (fn [gf of cf]
+                                           [(slurp gf) (slurp of)
+                                            (read-string (slurp cf))])
+                                         gts ocr-res error-codes)]
+                 (visualize-errors gt ocr codes))
+        errors (apply concat errors)]
+    (prn "start-building")
+    (build-substitution-map errors ocr-text)))
 
 ;;the current results are spitted to substitution-map.edn in the
 ;;resources folder
