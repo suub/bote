@@ -14,9 +14,4 @@
                  [pandect "0.3.0"]
                  [suub/error-codes "0.2.0"]
                  [instaparse "1.3.3"]]
-  :resource-paths ["resources"]
-  :profiles {:dev
-             {:dependencies [[org.apache.hadoop/hadoop-core "1.1.2"]
-                             [cascalog/midje-cascalog "2.0.0"]]
-              :plugins      [[lein-midje "3.0.1"]
-                             [lein-marginalia "0.7.1"]]}})
+  :resource-paths ["resources"])

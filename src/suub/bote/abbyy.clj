@@ -3,7 +3,6 @@
             [suub.bote.util :as util]
             [clojure.zip :as zip]
             [me.raynes.laser :as l]
-            [midje.sweet :refer :all]
             [pandect.core :as hash]))
 
 (defn parse
@@ -91,8 +90,6 @@
 
 (defn abbyy-matcher [m q]
   nil)
-
-(fact (abbyy-matcher "he"[{} {} {} {}]))
 
 (defn unzap [zp]
   (let [{:keys [origin zones structures]} zp]

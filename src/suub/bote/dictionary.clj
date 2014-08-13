@@ -22,7 +22,7 @@
       slurp
       edn/read-string))
 
-(defn index
+(defn lazy-index
   "Takes a transformation map and a collection of words,
   and returns a lazily computed index for using with `lookup`."
   [transformations words]
@@ -41,7 +41,7 @@
     {:transformations transformations
      :index (index-worker words)}))
 
-(t/is (= (index {"u" {"n" 1}}
+(t/is (= (lazy-index {"u" {"n" 1}}
                 {"uu" 'prob "nn" 'prob2})
          {:transformations {"u" {"n" 1}}
           :index [{:token "u"
@@ -50,8 +50,6 @@
                            :word-prob 'prob
                            :next []}]}]}))
 
-(def ni (atom 0))
-
 (defn tokenizer [matches]
   (let [tokenizer (->> matches
                        (map instac/string)
@@ -59,28 +57,29 @@
                        (instac/plus)
                        (vector :S)
                        (insta/parser))]
-    (fn [[word prob]]
-      (swap! ni inc)
+    (fn [word]
       (->> word
            (insta/parses tokenizer)
-           (r/map #(insta/transform {:S vector} %))
-           (r/map (fn [x] [x prob]))
-           (into [])))))
+           (r/map #(insta/transform {:S vector} %))))))
 
-(defn fast-index [transformations words]
+(defn create-index [tokenize]
+  (fn
+    ([] nil)
+    ([index word prob]
+       (println index)
+       (r/reduce (fn [index path]
+                   (println index)
+                   (assoc-in index (conj path :t) prob))
+                 index
+                 (tokenize word)))))
+
+(defn eager-index [transformations dict n]
   (let [t (tokenizer (keys transformations))
-        idx (->> words
-                 (r/mapcat t)
-                 (r/reduce (fn [a [w p]] (assoc-in a (conj w :t) p)) {}))]
+        idx (r/reduce(create-index t) dict)]
     {:transformations transformations
      :index idx}))
 
-(t/is (= (fast-index {"u" {"n" 1}}
-                     {"uu" 'prob "nn" 'prob2})
-         {:transformations {"u" {"n" 1}}
-          :index {"u" {"u" {:t 'prob}}}}))
-
-(defn lookup
+(defn lazy-lookup
   "Expects:
     * matching function that takes a collection of elements that
       are expected next by the index and the remainder of the query.
@@ -111,7 +110,7 @@
                     (:subst-prob %)))
          (lookup-worker index query))))
 
-(t/is (= (lookup
+(t/is (= (lazy-lookup
           (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
           {:transformations {"n" {"n" 1/2
                                   "u" 1/2}
@@ -130,7 +129,7 @@
            :substs [{:from "u" :to "n" :prob 1/2}
                     {:from "u" :to "u" :prob 1/2}]}]))
 
-(defn fast-lookup
+(defn eager-lookup
   "Expects:
     * matching function that takes a collection of elements that
       are expected next by the index and the remainder of the query.
@@ -162,29 +161,14 @@
                     (:subst-prob %)))
          (lookup-worker index query))))
 
-(t/is (= (fast-lookup
-          (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
-          {:transformations {"n" {"n" 1/2
-                                  "u" 1/2}
-                             "u" {"u" 1/2
-                                  "n" 1/2}}
-           :index {"n" {"u" {:t 1/3}}}}
-          "uu")
-         [{:word "nu"
-           :prob 1/12
-           :word-prob 1/3
-           :subst-prob 1/4
-           :substs [{:from "u" :to "n" :prob 1/2}
-                    {:from "u" :to "u" :prob 1/2}]}]))
-
-(def dict (builtin-dict))
-(def subst (builtin-substs))
-(def idx (future (fast-index subst dict)))
-(def l (lookup (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
+#_(def dict (builtin-dict))
+#_(def subst (builtin-substs))
+#_(def idx (index subst dict))
+#_(def l (lookup (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
                idx
                "Fig."))
 
-(defn difficult-word [idx]
+#_(defn difficult-word [idx]
   (fn [w]
     (if-let [l (not-empty
                 (sort-by :prob >
@@ -197,9 +181,4 @@
          (take 5 l)])
       [w nil])))
 
-(def difficult-words (remove nil? (map (difficult-word idx) (map first dict))))
-
-
-(defn set-interval [callback ms]
-  (let [f (future (while true (do (Thread/sleep ms) (callback))))]
-    (fn [] (future-cancel f))))
+#_(def difficult-words (remove nil? (map (difficult-word idx) (map first dict))))
