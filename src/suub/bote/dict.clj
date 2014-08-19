@@ -17,6 +17,7 @@
             [clojure.java.io :as io]
             [clojure.tools.reader.edn :as edn]
             [clojure.string :as string]
+            [clojure.data.priority-map :as pm]
             [instaparse.core :as insta]
             [instaparse.combinators :as instac]))
 ;; @@
@@ -25,163 +26,53 @@
 ;; <=
 
 ;; @@
-(defn builtin-dict []
-  (-> "dictionary.edn"
-      clojure.java.io/resource
-      slurp
-      edn/read-string))
+(defn read-dict [path]
+  (with-open [in (io/reader path)]
+    (let [words (->> (line-seq in)
+                     (r/map #(string/split % #"\s+"))
+                     (r/map (fn [[cnt _ simpl]] [simpl (bigint cnt)])))
+          word-count (r/fold + (r/map second words))]
+      (->> words
+           (r/map (fn [[w c]] [w (/ c word-count)]))
+           (into {})))))
 
-(defn builtin-substs []
-  (-> "substitutions.edn"
-      clojure.java.io/resource
-      slurp
-      edn/read-string))
+(defn read-substs [path]
+  (let [subst (-> path
+                  slurp
+                  edn/read-string)]
+    (into {}
+          (for [[truth n] subst
+                [ocr prob] n]
+            [[ocr truth] prob]))))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/builtin-substs</span>","value":"#'suub.bote.dictionary/builtin-substs"}
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/read-substs</span>","value":"#'suub.bote.dictionary/read-substs"}
 ;; <=
 
 ;; @@
-(def progress (atom 0))
-
-(defn tokenizer [matches]
-  (let [tokenizer (->> matches
-                       (map instac/string)
-                       (apply instac/alt)
-                       (instac/plus)
-                       (vector :S)
-                       (insta/parser))]
-    (fn [word]
-      (->> word
-           (insta/parses tokenizer)
-           (r/map #(insta/transform {:S vector} %))))))
-
-(defn subindex [tokenize part]
-  (r/reduce (fn [index [word prob]]
-              (swap! progress inc)
-              (r/reduce #(assoc-in %1 (conj %2 :t) prob)
-                        index
-                        (tokenize word)))
-            {}
-            part))
-
-
-(defn index [transformations dict n]
-  (let [tokenize (tokenizer (keys transformations))
-        idx (->> dict
-                 (partition-all n)
-                 (pmap #(subindex tokenize %))
-                 vec)]
-    {:transformations transformations
-     :index idx}))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/index</span>","value":"#'suub.bote.dictionary/index"}
-;; <=
-
-;; @@
-(defn lookup
-  "Expects:
-    * matching function that takes a collection of elements that
-      are expected next by the index and the remainder of the query.
-      In case of a match it must return a tuple of the match and the rest,
-      otherwise nil.
-    * An index to be matched against.
-    * A query to be matched.
-    Retuns the possible corrections, their probability of a match
-    and a collection of their substitutions."
-  [matcher {:keys [transformations index next]} query]
-  (letfn [(lookup-worker [sub-index sub-query]
-            (for [[to next] sub-index
-                  [subst subst-prob] (transformations to)
-                  :let [word-prob (:t next)
-                        [from rest :as matched] (matcher subst sub-query)]
-                  :when matched
-                  match (or (seq (lookup-worker next rest))
-                            (when (and (empty? rest) word-prob)
-                              [{:word ""
-                                :word-prob word-prob
-                                :subst-prob 1
-                                :substs nil}]))]
-              (-> match
-                  (update-in [:word] #(str to %))
-                  (update-in [:subst-prob] #(* % subst-prob))
-                  (update-in [:substs] #(cons {:from from :to to :prob subst-prob} %)))))]
-    (-> index
-        (mapcat #(lookup-worker % query))
-        (map #(assoc % :prob
-                     (* (:word-prob %)
-                        (:subst-prob %)))))))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/lookup</span>","value":"#'suub.bote.dictionary/lookup"}
-;; <=
-
-;; @@
-(def dict (builtin-dict))
-(def subst (builtin-substs))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/subst</span>","value":"#'suub.bote.dictionary/subst"}
-;; <=
-
-;; @@
-(def idx (future (index subst dict 100000)))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/idx</span>","value":"#'suub.bote.dictionary/idx"}
-;; <=
-
-;; @@
-(def d (into {} dict))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/d</span>","value":"#'suub.bote.dictionary/d"}
-;; <=
-
-;; @@
-(def s (into {}
-             (for [[truth n] subst
-                   [ocr prob] n]
-               [[ocr truth] prob])))
+(def d (read-dict "resources/dta-freq.d/dta-core-1850+.fuw"))
+(def s (read-substs "resources/substitutions.edn"))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/s</span>","value":"#'suub.bote.dictionary/s"}
 ;; <=
 
 ;; @@
-(defn transform
-  "Expects:
-    * matching function that takes a collection of elements that
-      are expected next by the transformations and the remainder of the query.
-      In case of a match it must return a tuple of the match and the rest,
-      otherwise nil.
-    * The transformations to be performed.
-    * A query to be matched.
-    Retuns the possible corrections, their probability of a match
-    and a collection of their substitutions."
-  [matcher substs query]
-  (letfn [(worker [sub-query]
-            (for [[[ocr truth] prob] substs
-                  :let [[from rest :as matched]
-                        (matcher ocr sub-query)]
-                  :when matched
-                  match (if (empty? rest)
-                          [{:word ""
-                            :subst-prob 1
-                            :substs nil}]
-                          (worker rest))]
-              (-> match
-                  (update-in [:word] #(str truth %))
-                  (update-in [:subst-prob] #(* % prob))
-                  (update-in [:substs] #(cons {:from from
-                                               :to truth
-                                               :prob prob} %)))))]
-    (worker query)))
+(defn prefixes [[w p]]
+  (into {}
+        (r/map (fn [n] [(subs w 0 n) p])
+          (range 0 (inc (count w))))))
+
+(defn merge-prefixes [& m]
+  (apply merge-with max m))
+
+(def prfx (time (r/reduce merge-prefixes (r/map prefixes d))))©ß
 ;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/transform</span>","value":"#'suub.bote.dictionary/transform"}
-;; <=
+
+;; @@
+(defn simple-matcher [p q]
+  (when-let [rest (util/drop-prefix p q)] [p rest]))
+;; @@
 
 ;; @@
 (defn transform
@@ -195,7 +86,7 @@
     Retuns the possible corrections, their probability of a match
     and a collection of their substitutions."
   [matcher dict dict-prefixes substs query]
-  (letfn [(iteration [run]
+  (letfn [(iterations [run]
             (for [[[ocr truth] prob] substs
                   :let [[from rest :as matched]
                         (matcher ocr (:rest run))]
@@ -208,170 +99,166 @@
                                               {:from from
                                                :to truth
                                                :prob prob})))))
-          (worker [unfinished finished]
-            (if (empty? unfinished)
-              finished
-              (let [{new-finished true
-                     new-unfinished false}
-                    (->> unfinished
-                         (mapcat iteration)
-                         (filter (comp dict-prefixes :word))
-                         (group-by (comp empty? :rest)))]
-                (recur new-unfinished
-                       (into finished new-finished)))))]
-    (->> (worker #{{:rest query
+          (worker [unfinished]
+            (lazy-seq
+             (loop [unfinished unfinished]
+               (when (seq unfinished)
+                 (let [candidate (-> unfinished peek first)]
+                   (if (empty? (:rest candidate))
+                     (cons candidate (worker (pop unfinished)))
+                     (recur (into (pop unfinished)
+                                  (for [{:keys [rest word subst-prob]
+                                         :as iteration} (iterations candidate)
+                                        :let [prefix-prob (dict-prefixes word)
+                                              dict-prob (dict word)
+                                              word-prob (if (empty? rest)
+                                                          dict-prob
+                                                          prefix-prob)]
+                                        :when word-prob
+                                        :let [prob (* word-prob subst-prob)]]
+                                        [(assoc iteration
+                                           :word-prob word-prob
+                                           :prob prob)
+                                         (- prob)])))))))))]
+    (->> (worker (pm/priority-map
+                  {:rest query
                    :word ""
                    :subst-prob 1
-                   :substs []}}
-                 #{})
-         (map #(dissoc % :rest))
-         (map #(assoc % :word-prob (dict (:word %))))
-         (filter :word-prob)
-         (map #(assoc % :prob (* (:word-prob %)
-                                 (:subst-prob %)))))))
+                   :substs []}
+                  1))
+         (map #(dissoc % :rest)))))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/transform</span>","value":"#'suub.bote.dictionary/transform"}
 ;; <=
 
 ;; @@
-(defn simple-matcher [p q]
-  (when-let [rest (util/drop-prefix p q)] [p rest]))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/simple-matcher</span>","value":"#'suub.bote.dictionary/simple-matcher"}
-;; <=
-
-;; @@
-(time (transform simple-matcher s "H"))
+(time (first (transform simple-matcher d prfx s "oldenburg")))
 ;; @@
 ;; ->
-;;; &quot;Elapsed time: 0.821 msecs&quot;
+;;; &quot;Elapsed time: 321.836 msecs&quot;
 ;;; 
 ;; <-
 ;; =>
-;;; {"type":"list-like","open":"<span class='clj-lazy-seq'>(</span>","close":"<span class='clj-lazy-seq'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-list'>(</span>","close":"<span class='clj-list'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:from \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:to \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1057/1073</span>","value":"1057/1073"}],"value":"[:prob 1057/1073]"}],"value":"{:from \"H\", :to \"H\", :prob 1057/1073}"}],"value":"({:from \"H\", :to \"H\", :prob 1057/1073})"}],"value":"[:substs ({:from \"H\", :to \"H\", :prob 1057/1073})]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:word \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>1057/1073</span>","value":"1057/1073"}],"value":"[:subst-prob 1057/1073]"}],"value":"{:substs ({:from \"H\", :to \"H\", :prob 1057/1073}), :word \"H\", :subst-prob 1057/1073}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-list'>(</span>","close":"<span class='clj-list'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:from \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;h&quot;</span>","value":"\"h\""}],"value":"[:to \"h\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>10/1073</span>","value":"10/1073"}],"value":"[:prob 10/1073]"}],"value":"{:from \"H\", :to \"h\", :prob 10/1073}"}],"value":"({:from \"H\", :to \"h\", :prob 10/1073})"}],"value":"[:substs ({:from \"H\", :to \"h\", :prob 10/1073})]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;h&quot;</span>","value":"\"h\""}],"value":"[:word \"h\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>10/1073</span>","value":"10/1073"}],"value":"[:subst-prob 10/1073]"}],"value":"{:substs ({:from \"H\", :to \"h\", :prob 10/1073}), :word \"h\", :subst-prob 10/1073}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-list'>(</span>","close":"<span class='clj-list'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:from \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;\\f&quot;</span>","value":"\"\\f\""}],"value":"[:to \"\\f\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1/1073</span>","value":"1/1073"}],"value":"[:prob 1/1073]"}],"value":"{:from \"H\", :to \"\\f\", :prob 1/1073}"}],"value":"({:from \"H\", :to \"\\f\", :prob 1/1073})"}],"value":"[:substs ({:from \"H\", :to \"\\f\", :prob 1/1073})]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;\\f&quot;</span>","value":"\"\\f\""}],"value":"[:word \"\\f\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>1/1073</span>","value":"1/1073"}],"value":"[:subst-prob 1/1073]"}],"value":"{:substs ({:from \"H\", :to \"\\f\", :prob 1/1073}), :word \"\\f\", :subst-prob 1/1073}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-list'>(</span>","close":"<span class='clj-list'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:from \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;R&quot;</span>","value":"\"R\""}],"value":"[:to \"R\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1/1073</span>","value":"1/1073"}],"value":"[:prob 1/1073]"}],"value":"{:from \"H\", :to \"R\", :prob 1/1073}"}],"value":"({:from \"H\", :to \"R\", :prob 1/1073})"}],"value":"[:substs ({:from \"H\", :to \"R\", :prob 1/1073})]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;R&quot;</span>","value":"\"R\""}],"value":"[:word \"R\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>1/1073</span>","value":"1/1073"}],"value":"[:subst-prob 1/1073]"}],"value":"{:substs ({:from \"H\", :to \"R\", :prob 1/1073}), :word \"R\", :subst-prob 1/1073}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-list'>(</span>","close":"<span class='clj-list'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:from \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;\\nh&quot;</span>","value":"\"\\nh\""}],"value":"[:to \"\\nh\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1/1073</span>","value":"1/1073"}],"value":"[:prob 1/1073]"}],"value":"{:from \"H\", :to \"\\nh\", :prob 1/1073}"}],"value":"({:from \"H\", :to \"\\nh\", :prob 1/1073})"}],"value":"[:substs ({:from \"H\", :to \"\\nh\", :prob 1/1073})]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;\\nh&quot;</span>","value":"\"\\nh\""}],"value":"[:word \"\\nh\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>1/1073</span>","value":"1/1073"}],"value":"[:subst-prob 1/1073]"}],"value":"{:substs ({:from \"H\", :to \"\\nh\", :prob 1/1073}), :word \"\\nh\", :subst-prob 1/1073}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-list'>(</span>","close":"<span class='clj-list'>)</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;H&quot;</span>","value":"\"H\""}],"value":"[:from \"H\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;\\n\\n&quot;</span>","value":"\"\\n\\n\""}],"value":"[:to \"\\n\\n\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>3/1073</span>","value":"3/1073"}],"value":"[:prob 3/1073]"}],"value":"{:from \"H\", :to \"\\n\\n\", :prob 3/1073}"}],"value":"({:from \"H\", :to \"\\n\\n\", :prob 3/1073})"}],"value":"[:substs ({:from \"H\", :to \"\\n\\n\", :prob 3/1073})]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;\\n\\n&quot;</span>","value":"\"\\n\\n\""}],"value":"[:word \"\\n\\n\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>3/1073</span>","value":"3/1073"}],"value":"[:subst-prob 3/1073]"}],"value":"{:substs ({:from \"H\", :to \"\\n\\n\", :prob 3/1073}), :word \"\\n\\n\", :subst-prob 3/1073}"}],"value":"({:substs ({:from \"H\", :to \"H\", :prob 1057/1073}), :word \"H\", :subst-prob 1057/1073} {:substs ({:from \"H\", :to \"h\", :prob 10/1073}), :word \"h\", :subst-prob 10/1073} {:substs ({:from \"H\", :to \"\\f\", :prob 1/1073}), :word \"\\f\", :subst-prob 1/1073} {:substs ({:from \"H\", :to \"R\", :prob 1/1073}), :word \"R\", :subst-prob 1/1073} {:substs ({:from \"H\", :to \"\\nh\", :prob 1/1073}), :word \"\\nh\", :subst-prob 1/1073} {:substs ({:from \"H\", :to \"\\n\\n\", :prob 3/1073}), :word \"\\n\\n\", :subst-prob 3/1073})"}
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>226868733196194990692/65150994323949149994027982138470625</span>","value":"226868733196194990692/65150994323949149994027982138470625"}],"value":"[:prob 226868733196194990692/65150994323949149994027982138470625]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word-prob</span>","value":":word-prob"},{"type":"html","content":"<span class='clj-ratio'>1/35044324</span>","value":"1/35044324"}],"value":"[:word-prob 1/35044324]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;Isenburg&quot;</span>","value":"\"Isenburg\""}],"value":"[:word \"Isenburg\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>6352324529493459739376/52054873167779643854245369375</span>","value":"6352324529493459739376/52054873167779643854245369375"}],"value":"[:subst-prob 6352324529493459739376/52054873167779643854245369375]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;o&quot;</span>","value":"\"o\""}],"value":"[:from \"o\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;I&quot;</span>","value":"\"I\""}],"value":"[:to \"I\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1/331</span>","value":"1/331"}],"value":"[:prob 1/331]"}],"value":"{:from \"o\", :to \"I\", :prob 1/331}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;ld&quot;</span>","value":"\"ld\""}],"value":"[:from \"ld\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;s&quot;</span>","value":"\"s\""}],"value":"[:to \"s\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1/23530</span>","value":"1/23530"}],"value":"[:prob 1/23530]"}],"value":"{:from \"ld\", :to \"s\", :prob 1/23530}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;e&quot;</span>","value":"\"e\""}],"value":"[:from \"e\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;e&quot;</span>","value":"\"e\""}],"value":"[:to \"e\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1474/1475</span>","value":"1474/1475"}],"value":"[:prob 1474/1475]"}],"value":"{:from \"e\", :to \"e\", :prob 1474/1475}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;n&quot;</span>","value":"\"n\""}],"value":"[:from \"n\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;n&quot;</span>","value":"\"n\""}],"value":"[:to \"n\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>42574/43245</span>","value":"42574/43245"}],"value":"[:prob 42574/43245]"}],"value":"{:from \"n\", :to \"n\", :prob 42574/43245}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;b&quot;</span>","value":"\"b\""}],"value":"[:from \"b\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;b&quot;</span>","value":"\"b\""}],"value":"[:to \"b\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>3093/3109</span>","value":"3093/3109"}],"value":"[:prob 3093/3109]"}],"value":"{:from \"b\", :to \"b\", :prob 3093/3109}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;u&quot;</span>","value":"\"u\""}],"value":"[:from \"u\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;u&quot;</span>","value":"\"u\""}],"value":"[:to \"u\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>14752/15161</span>","value":"14752/15161"}],"value":"[:prob 14752/15161]"}],"value":"{:from \"u\", :to \"u\", :prob 14752/15161}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;r&quot;</span>","value":"\"r\""}],"value":"[:from \"r\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;r&quot;</span>","value":"\"r\""}],"value":"[:to \"r\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>28869/28922</span>","value":"28869/28922"}],"value":"[:prob 28869/28922]"}],"value":"{:from \"r\", :to \"r\", :prob 28869/28922}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;g&quot;</span>","value":"\"g\""}],"value":"[:from \"g\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;g&quot;</span>","value":"\"g\""}],"value":"[:to \"g\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>5533/5534</span>","value":"5533/5534"}],"value":"[:prob 5533/5534]"}],"value":"{:from \"g\", :to \"g\", :prob 5533/5534}"}],"value":"[{:from \"o\", :to \"I\", :prob 1/331} {:from \"ld\", :to \"s\", :prob 1/23530} {:from \"e\", :to \"e\", :prob 1474/1475} {:from \"n\", :to \"n\", :prob 42574/43245} {:from \"b\", :to \"b\", :prob 3093/3109} {:from \"u\", :to \"u\", :prob 14752/15161} {:from \"r\", :to \"r\", :prob 28869/28922} {:from \"g\", :to \"g\", :prob 5533/5534}]"}],"value":"[:substs [{:from \"o\", :to \"I\", :prob 1/331} {:from \"ld\", :to \"s\", :prob 1/23530} {:from \"e\", :to \"e\", :prob 1474/1475} {:from \"n\", :to \"n\", :prob 42574/43245} {:from \"b\", :to \"b\", :prob 3093/3109} {:from \"u\", :to \"u\", :prob 14752/15161} {:from \"r\", :to \"r\", :prob 28869/28922} {:from \"g\", :to \"g\", :prob 5533/5534}]]"}],"value":"{:prob 226868733196194990692/65150994323949149994027982138470625, :word-prob 1/35044324, :word \"Isenburg\", :subst-prob 6352324529493459739376/52054873167779643854245369375, :substs [{:from \"o\", :to \"I\", :prob 1/331} {:from \"ld\", :to \"s\", :prob 1/23530} {:from \"e\", :to \"e\", :prob 1474/1475} {:from \"n\", :to \"n\", :prob 42574/43245} {:from \"b\", :to \"b\", :prob 3093/3109} {:from \"u\", :to \"u\", :prob 14752/15161} {:from \"r\", :to \"r\", :prob 28869/28922} {:from \"g\", :to \"g\", :prob 5533/5534}]}"}
 ;; <=
 
 ;; @@
-(time (count (transform simple-matcher s "aaaa")))
-;; @@
-
-;; @@
-  (defn total-memory [obj]
-    (let [baos (java.io.ByteArrayOutputStream.)]
-      (with-open [oos (java.io.ObjectOutputStream. baos)]
-        (.writeObject oos obj))
-      (count (.toByteArray baos))))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/total-memory</span>","value":"#'suub.bote.dictionary/total-memory"}
-;; <=
-
-;; @@
-(defn prefixes [s]
-  (map #(subs s 0 %)
-          (range 0 (inc (count s)))))
-(def prfx (time (into #{} (mapcat prefixes (map first d)))))
+(time (first (transform simple-matcher d prfx s "mann")))
 ;; @@
 ;; ->
-;;; &quot;Elapsed time: 148370.09 msecs&quot;
+;;; &quot;Elapsed time: 11.501 msecs&quot;
 ;;; 
 ;; <-
 ;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/prfx</span>","value":"#'suub.bote.dictionary/prfx"}
+;;; {"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>16400378787/3148697432031676</span>","value":"16400378787/3148697432031676"}],"value":"[:prob 16400378787/3148697432031676]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word-prob</span>","value":":word-prob"},{"type":"html","content":"<span class='clj-ratio'>93/17522162</span>","value":"93/17522162"}],"value":"[:word-prob 93/17522162]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:word</span>","value":":word"},{"type":"html","content":"<span class='clj-string'>&quot;mann&quot;</span>","value":"\"mann\""}],"value":"[:word \"mann\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:subst-prob</span>","value":":subst-prob"},{"type":"html","content":"<span class='clj-ratio'>176348159/179697998</span>","value":"176348159/179697998"}],"value":"[:subst-prob 176348159/179697998]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:substs</span>","value":":substs"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;m&quot;</span>","value":"\"m\""}],"value":"[:from \"m\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;m&quot;</span>","value":"\"m\""}],"value":"[:to \"m\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>8403/8527</span>","value":"8403/8527"}],"value":"[:prob 8403/8527]"}],"value":"{:from \"m\", :to \"m\", :prob 8403/8527}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;a&quot;</span>","value":"\"a\""}],"value":"[:from \"a\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;a&quot;</span>","value":"\"a\""}],"value":"[:to \"a\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>2171/2173</span>","value":"2171/2173"}],"value":"[:prob 2171/2173]"}],"value":"{:from \"a\", :to \"a\", :prob 2171/2173}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:from</span>","value":":from"},{"type":"html","content":"<span class='clj-string'>&quot;nn&quot;</span>","value":"\"nn\""}],"value":"[:from \"nn\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:to</span>","value":":to"},{"type":"html","content":"<span class='clj-string'>&quot;nn&quot;</span>","value":"\"nn\""}],"value":"[:to \"nn\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:prob</span>","value":":prob"},{"type":"html","content":"<span class='clj-ratio'>1537/1542</span>","value":"1537/1542"}],"value":"[:prob 1537/1542]"}],"value":"{:from \"nn\", :to \"nn\", :prob 1537/1542}"}],"value":"[{:from \"m\", :to \"m\", :prob 8403/8527} {:from \"a\", :to \"a\", :prob 2171/2173} {:from \"nn\", :to \"nn\", :prob 1537/1542}]"}],"value":"[:substs [{:from \"m\", :to \"m\", :prob 8403/8527} {:from \"a\", :to \"a\", :prob 2171/2173} {:from \"nn\", :to \"nn\", :prob 1537/1542}]]"}],"value":"{:prob 16400378787/3148697432031676, :word-prob 93/17522162, :word \"mann\", :subst-prob 176348159/179697998, :substs [{:from \"m\", :to \"m\", :prob 8403/8527} {:from \"a\", :to \"a\", :prob 2171/2173} {:from \"nn\", :to \"nn\", :prob 1537/1542}]}"}
 ;; <=
 
 ;; @@
-(total-memory prfx)
+(apply max-key count (keys d))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-unkown'>288919138</span>","value":"288919138"}
+;;; {"type":"html","content":"<span class='clj-string'>&quot;vonVerkauff-Courant-Zeit-Factorie-Unkosten-Rent-Thara-Rabatt-Baratto-Schiffs-Part&quot;</span>","value":"\"vonVerkauff-Courant-Zeit-Factorie-Unkosten-Rent-Thara-Rabatt-Baratto-Schiffs-Part\""}
 ;; <=
 
 ;; @@
-(time (count (transform simple-matcher d prfx s "hallo")))
+(d "Mann")
 ;; @@
-;; ->
-;;; &quot;Elapsed time: 11935.504 msecs&quot;
-;;; 
-;; <-
 ;; =>
-;;; {"type":"html","content":"<span class='clj-unkown'>1318</span>","value":"1318"}
+;;; {"type":"html","content":"<span class='clj-ratio'>8907/35044324</span>","value":"8907/35044324"}
 ;; <=
 
 ;; @@
-(defn lazy-index
-  "Takes a transformation map and a collection of words,
-  and returns a lazily computed index for using with `lookup`."
-  [transformations words]
-  (letfn [(index-worker [rests]
-            (for [[to _] transformations
-                  :let [matching (for [[word prob] rests
-                                       :let [rst (util/drop-prefix to word)]
-                                       :when rst]
-                                   [rst prob])]
-                  :when (not-empty matching)]
-              {:token to
-               :word-prob (some (fn [[word prob]]
-                                  (when (empty? word) prob))
-                                matching)
-               :next (index-worker matching)}))]
-    {:transformations transformations
-     :index (index-worker words)}))
+(def difficult (filter #(not= % (->> %
+                                    (transform simple-matcher d prfx s)
+                                    first
+                                    :word))
+                       (keys d)))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/lazy-index</span>","value":"#'suub.bote.dictionary/lazy-index"}
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/difficult</span>","value":"#'suub.bote.dictionary/difficult"}
 ;; <=
 
 ;; @@
-(defn lazy-lookup
-  "Expects:
-    * matching function that takes a collection of elements that
-      are expected next by the index and the remainder of the query.
-      In case of a match it must return a tuple of the match and the rest,
-      otherwise nil.
-    * An index to be matched against.
-    * A query to be matched.
-    Retuns the possible corrections, their probability of a match
-    and a collection of their substitutions."
-  [matcher {:keys [transformations index next]} query]
-  (letfn [(lookup-worker [sub-index sub-query]
-            (for [{to :token, word-prob :word-prob, next :next} sub-index
-                  [subst subst-prob] (transformations to)
-                  :let [[from rest :as matched] (matcher subst sub-query)]
-                  :when matched
-                  match (or (seq (lookup-worker next rest))
-                            (when (and (empty? rest) word-prob)
-                              [{:word ""
-                                :word-prob word-prob
-                                :subst-prob 1
-                                :substs nil}]))]
-              (-> match
-                  (update-in [:word] #(str to %))
-                  (update-in [:subst-prob] #(* % subst-prob))
-                  (update-in [:substs] #(cons {:from from :to to :prob subst-prob} %)))))]
-    (map #(assoc % :prob
-                 (* (:word-prob %)
-                    (:subst-prob %)))
-         (lookup-worker index query))))
+(first difficult)
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/lazy-lookup</span>","value":"#'suub.bote.dictionary/lazy-lookup"}
+;;; {"type":"html","content":"<span class='clj-string'>&quot;Gentleman-Farmers&quot;</span>","value":"\"Gentleman-Farmers\""}
+;; <=
+
+;; **
+;;; #Deployment code
+;; **
+
+;; @@
+(defn correct-word [word]
+  (if (Character/isSpace (first word))
+    word
+    (or (:word (first (transform simple-matcher d prfx s word)))
+        word)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/correct-word</span>","value":"#'suub.bote.dictionary/correct-word"}
 ;; <=
 
 ;; @@
-(def idx (lazy-index subst dict))
-(time (count (lazy-lookup simple-matcher idx "hallo")))
-(time (count (lazy-lookup simple-matcher idx "hallo")))
+(defn correct-page [page]
+  (->> page
+       (partition-by #(Character/isSpace %))
+       (mapcat correct-word)
+       (apply str)))
 ;; @@
-;; ->
-;;; &quot;Elapsed time: 211908.529 msecs&quot;
-;;; &quot;Elapsed time: 174.171 msecs&quot;
-;;; 
-;; <-
 ;; =>
-;;; {"type":"html","content":"<span class='clj-unkown'>1318</span>","value":"1318"}
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/correct-page</span>","value":"#'suub.bote.dictionary/correct-page"}
+;; <=
+
+;; @@
+(correct-page "der iiiann grht gerne mit mut nach oldenburg")
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-string'>&quot;den Milano geht gerne Mit mut nach Isenburg&quot;</span>","value":"\"den Milano geht gerne Mit mut nach Isenburg\""}
+;; <=
+
+;; @@
+(def files (rest (file-seq (io/file "/Users/ticking/Desktop/ocr-engine-results/abby_verbessert/unverbessert"))))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/files</span>","value":"#'suub.bote.dictionary/files"}
+;; <=
+
+;; @@
+(future
+(doall
+ (pmap (fn [f]
+         (->> f
+              slurp
+     		  correct-page
+       		  (spit (io/file "/Users/ticking/Desktop/ocr-engine-results/abby_verbessert2/ocr-results" (.getName f)))))
+       files)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>#&lt;core$future_call$reify__6267@28f6ec64: :pending&gt;</span>","value":"#<core$future_call$reify__6267@28f6ec64: :pending>"}
+;; <=
+
+;; @@
+(def f *1)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dictionary/f</span>","value":"#'suub.bote.dictionary/f"}
+;; <=
+
+;; @@
+f
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>#&lt;core$future_call$reify__6267@28f6ec64: (nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil)&gt;</span>","value":"#<core$future_call$reify__6267@28f6ec64: (nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil)>"}
+;; <=
+
+;; @@
+(d "die")
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-ratio'>1/35044324</span>","value":"1/35044324"}
 ;; <=
 
 ;; @@
