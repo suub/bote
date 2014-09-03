@@ -15,4 +15,5 @@
                  [pandect "0.3.0"]
                  [suub/error-codes "0.2.0"]
                  [instaparse "1.3.3"]]
-  :resource-paths ["resources"])
+  :resource-paths ["resources"]
+  :plugins [[lein-gorilla "0.3.3"]])

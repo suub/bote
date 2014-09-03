@@ -111,7 +111,6 @@
          (lookup-worker index query))))
 
 (t/is (= (lazy-lookup
-          (fn [p q] (when-let [rest (util/drop-prefix p q)] [p rest]))
           {:transformations {"n" {"n" 1/2
                                   "u" 1/2}
                              "u" {"u" 1/2
