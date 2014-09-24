@@ -12,9 +12,9 @@
                  [org.clojure/data.priority-map "0.0.5"]
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
-                 [me.raynes/laser "2.0.0-SNAPSHOT"]
+                 [me.raynes/laser "1.1.1"]
                  [pandect "0.3.4"]
-                 [suub/error-codes "0.2.0"]
+                 [de.undeadco/error-codes "0.3.0-SNAPSHOT"]
                  [instaparse "1.3.4"]]
   :resource-paths ["resources"]
   :plugins [[lein-gorilla "0.3.4-SNAPSHOT"]])
