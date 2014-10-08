@@ -13,7 +13,7 @@
                  [com.taoensso/timbre "2.6.2"]
                  [me.raynes/laser "2.0.0-SNAPSHOT"]
                  [pandect "0.3.0"]
-                 [suub/error-codes "0.2.0"]
+                 [suub/error-codes "0.2.0-SNAPSHOT"]
                  [instaparse "1.3.3"]]
   :resource-paths ["resources"]
   :plugins [[lein-gorilla "0.3.3"]])
