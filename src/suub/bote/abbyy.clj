@@ -10,10 +10,9 @@
   (:require [taoensso.timbre :refer [spy debug info error]]
             [clojure.java.io :as io]
             [clojure.core.reducers :as r]
-            [clojure.xml :as xml]
             [suub.bote.util :as util]
-            [clojure.zip :as zip]
-            [me.raynes.laser :as l]
+            [clojure.zip :as z]
+            [clojure.data.zip.xml :as xz]
             [pandect.core :as hash]
             [me.raynes.fs :as fs]))
 ;; @@
@@ -22,37 +21,22 @@
 ;; <=
 
 ;; **
-;;; ##Reading XML files.
-;; **
-
-;; @@
-(defn parse
-  "Takes a xml string or file and returns its hicory parse."
-  [p]
-  (l/parse p :parser :xml))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/parse</span>","value":"#'suub.bote.abbyy/parse"}
-;; <=
-
-;; **
 ;;; ##Extracting information.
 ;; **
 
 ;; @@
-(defn page-info
+(defn page-info ;TODO fix xml1
   "Extracts page metadata."
   [node]
-  (let [loc (l/zip node)
+  (let [loc (z/xml-zip node)
+        _ (println loc)
         pge (-> loc
-                (l/select (l/element= :page))
-                first
+                (xz/xml1-> (xz/tag= :page))
                 :attrs)]
     {:height (-> pge :height Integer.)
      :width  (-> pge :width Integer.)
      :skew   (-> loc
-                 (l/select (l/attr? :skewangle))
-                 first
+                 (xz/xml1-> (comp boolean :skewangle :attrs))
                  :attrs
                  :skewangle
                  Double.)}))
@@ -66,7 +50,8 @@
   "Calculates the zone around the given page element.
    This is used to uniquely identify page elements across multiple systems."
   [node]
-  (when (every? (:attrs node) [:l :t :r :b])
+  (when (clojure.set/subset? #{:l :t :r :b}
+                             (-> node :attrs keys set))
     (let [l (-> node :attrs :l Integer.)
           t (-> node :attrs :t Integer.)
           r (-> node :attrs :r Integer.)
@@ -75,22 +60,6 @@
      :t t
      :r r
      :b b})))
-
-(defn zone?
-  "A laser selector for selecting all nodes that have a zone."
-  [zone]
-  (fn [loc] (-> loc zip/node zone boolean)))
-
-(defn zone=
-  "A laser selector for selecting a node by its zone."
-  [zone]
-  (fn [loc] (= zone (-> loc zip/node zone))))
-
-(defn zone-in
-  "Returns a laser selector that selects elements that are
-   withing the provided collection of zones."
-  [zones]
-  (fn [loc] (boolean ((set zones) (-> loc zip/node zone)))))
 
 (defn convex-hull [& args]
   {:l (apply min (map :l args))
@@ -106,9 +75,10 @@
 (defn characters
   "Extracts all character zones with their relevant data."
   [node]
-  (for [node (l/select (l/zip node) (l/element= :charparams))
+  (for [node (xml-seq node)
+        :when (= :charParams (:tag node))
         :let [z (zone node)
-              s (-> node :content first)
+              s (-> node :content first (or [nil]))
               x (-> node :attrs :l Integer.)
               y (-> node :attrs :t Integer.)
               w (- (-> node :attrs :r Integer.) x)
@@ -123,9 +93,10 @@
       :height h}}))
 
 (defn lines [node]
-  (map characters
-       (l/select (l/zip node) (l/element= :line))))
-
+  (->> node
+       xml-seq
+       (filter #(= :line (:tag %)))
+       (map characters)))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/lines</span>","value":"#'suub.bote.abbyy/lines"}
@@ -165,42 +136,65 @@
 ;; @@
 (defn change [corr page]
   (let [expansions
-        (into {} (for [{f :from t :to} corr]
-                   [(:zone (first f))
-                    {:content [t]
-                     :zone (apply convex-hull (map :zone f))}]))
+        (ref
+          (group-by :anchor-zone
+                    (for [{f :from t :to} corr]
+                      {:anchor-zone (:zone (first f))
+                       :content [t]
+                       :new-zone (into {}
+                                       (map
+                                         (fn [[k v]][k (str v)])
+                                         (apply convex-hull (map :zone f))))})))
         removal
-        (into #{} (for [{f :from t :to} corr
-                        r (rest f)]
-                    (:zone r)))]
-    (l/at page
-      (l/element= :charparams)
-      #(let [z (zone %)]
-         (if-let [e (expansions z)]
-           (-> %
-               (assoc :content (:content e))
-               (update-in [:attrs] merge (:zone e)))
-           (when (not (removal z))
-             %))))))
+        (ref
+          (clojure.set/difference
+            (set (for [{f :from t :to} corr
+                       r (rest f)]
+                   (:zone r)))))]
+    (loop [loc (z/xml-zip page)]
+      (cond
+        (z/end? loc)
+          (z/root loc)
+        (not= :charParams (:tag (z/node loc)))
+          (-> loc
+              z/next
+              recur)
+        (expansions (zone (z/node loc)))
+          (let [n (z/node loc)
+                z (zone n)
+                nn (map
+                     #(-> n
+                          (assoc :content (:content %))
+                          (update-in [:attrs] merge (:new-zone %)))
+                     (expansions z))]
+            (dosync
+              (alter expansions dissoc z)
+              (alter removal conj z))
+            (recur
+              (as-> loc %
+                    (reduce z/insert-left % nn)
+                    (z/remove %)
+                    (z/next %))))
+        (removal (zone (z/node loc)))
+          (-> loc
+              z/remove
+              z/next
+              recur)
+        :else
+          (-> loc
+              z/next
+              recur)))))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/change</span>","value":"#'suub.bote.abbyy/change"}
 ;; <=
 
-;; @@
-(defn emit [page]
-  (xml/emit page))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/emit</span>","value":"#'suub.bote.abbyy/emit"}
-;; <=
-
 ;; **
-;;;  ##Correction
+;;; ##Correction
 ;; **
 
 ;; @@
-(defn abbyy-matcher [matcher query]
+(defn matcher [matcher query]
   (loop [match []
          mrest (seq matcher)
          qrest (seq query)]
@@ -213,5 +207,5 @@
                    (rest qrest)))))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/abbyy-matcher</span>","value":"#'suub.bote.abbyy/abbyy-matcher"}
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/matcher</span>","value":"#'suub.bote.abbyy/matcher"}
 ;; <=
