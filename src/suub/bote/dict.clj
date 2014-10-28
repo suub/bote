@@ -153,8 +153,10 @@
                 "naeh"
                 "fie"
                 "fic"
+                "zn"
                 "Dic"
                 "gebranch"
+                "uud"
                 "Irrcreden"
                 "Tanfe"))
 ;; @@
@@ -395,6 +397,8 @@
     (println "starte Auswärtung")
     (let [statistic (ec/gen-statistics-for-base-directories [corrected-base-directory])
           correction-statistic (ec/generate-correction-statistics ocr-base-directory corrected-base-directory)]
+      (spit (clojure.java.io/file corrected-base-directory "statistics.edn") (pr-str (second (first statistic))))
+      (spit (clojure.java.io/file corrected-base-directory "correction-statistic.edn") (pr-str correction-statistic))
       {:statistic statistic
        :correction-statistic correction-statistic})))
 ;; @@
