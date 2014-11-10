@@ -9,6 +9,7 @@
 (ns ^{:doc "XML reading/writing."
        :author "Rich Hickey"}
   suub.bote.clojure.xml
+  (:require [clojure.string :as string])
   (:import (org.xml.sax ContentHandler Attributes SAXException)
            (javax.xml.parsers SAXParser SAXParserFactory)))
 

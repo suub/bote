@@ -15,6 +15,7 @@
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
                  [pandect "0.3.4"]
-                 [de.undeadco/error-codes "0.3.0-SNAPSHOT"]]
+                 [de.undeadco/marmoset "0.1.0-SNAPSHOT"]
+                 [suub/error-codes "0.2.0-SNAPSHOT"]]
   :resource-paths ["resources"]
   :plugins [[lein-gorilla "0.3.4-SNAPSHOT"]])

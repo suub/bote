@@ -129,6 +129,28 @@
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/remove-linewrap</span>","value":"#'suub.bote.abbyy/remove-linewrap"}
 ;; <=
 
+;; @@
+(defn text [e]
+  (->> e
+       flatten
+       (map :char)
+       (apply str)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/text</span>","value":"#'suub.bote.abbyy/text"}
+;; <=
+
+;; @@
+(defn page-text [p]
+  (apply str (map (fn [l]
+                    (str (text l)
+                         "\n"))
+                  (lines p))))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/page-text</span>","value":"#'suub.bote.abbyy/page-text"}
+;; <=
+
 ;; **
 ;;; ##Reintegrating data into XML documents.
 ;; **
