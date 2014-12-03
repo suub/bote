@@ -25,21 +25,20 @@
 ;; **
 
 ;; @@
-(defn page-info ;TODO fix xml1
+(defn page-info
   "Extracts page metadata."
   [node]
-  (let [loc (z/xml-zip node)
-        _ (println loc)
-        pge (-> loc
-                (xz/xml1-> (xz/tag= :page))
-                :attrs)]
-    {:height (-> pge :height Integer.)
-     :width  (-> pge :width Integer.)
-     :skew   (-> loc
-                 (xz/xml1-> (comp boolean :skewangle :attrs))
-                 :attrs
-                 :skewangle
-                 Double.)}))
+  (let [pge (->> node
+                 xml-seq
+                 (some #(when (= :page (:tag %)) %))
+                 :attrs)
+        angle (->> node
+                   xml-seq
+                   (some #(:skewAngle (:attrs %)))
+                   Double/parseDouble)]
+    {:height (-> pge :height Integer/parseInt)
+     :width  (-> pge :width Integer/parseInt)
+     :skew   angle}))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/page-info</span>","value":"#'suub.bote.abbyy/page-info"}
@@ -69,6 +68,18 @@
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/convex-hull</span>","value":"#'suub.bote.abbyy/convex-hull"}
+;; <=
+
+;; @@
+(defn zone>bbox [z]
+  (let [{:keys [l t r b]} z]
+    {:x l
+     :y t
+     :w (Math/abs (- l r))
+     :h (Math/abs (- t b))}))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/zone&gt;bbox</span>","value":"#'suub.bote.abbyy/zone>bbox"}
 ;; <=
 
 ;; @@
@@ -231,3 +242,18 @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/matcher</span>","value":"#'suub.bote.abbyy/matcher"}
 ;; <=
+
+;; **
+;;; ##Util
+;; **
+
+;; @@
+(defn files [path]
+  (->> path
+       io/file
+       file-seq
+       (filter #(and (fs/file? %)
+                     (= ".xml" (fs/extension %))
+                     (re-matches #"\d+" (fs/base-name % true))))
+       (map #(vector (fs/base-name % true) %))))
+;; @@
