@@ -261,7 +261,9 @@
 ;; @@
 
 (declare image)
-
+(defn image [char-node tiff-img]
+  (let [{:keys [x y width height]} (:dim char-node)]
+    (sub-image tiff-img x y width height)))
 
 (defn extract-images
   "extracts images for the characters in node which match
