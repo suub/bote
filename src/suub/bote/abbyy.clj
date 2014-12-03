@@ -231,3 +231,31 @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/matcher</span>","value":"#'suub.bote.abbyy/matcher"}
 ;; <=
+
+(declare image)
+
+
+(defn extract-images
+  "extracts images for the characters in node which match
+   the pred?"
+  [page pred?]
+  (let [chars (apply concat (lines page))]
+    (map image (filter (comp pred? :char) chars))))
+
+
+(defn process-xml [xml-file tif]
+  (let [page (clojure.xml/parse xml-file)]
+    (extract-images page #{\n \u})))
+
+
+(defn process-jg [jg]
+  (let [fulltexts (sort-by (memfn getName) (fs/list-dir (io/file jg "fulltext")))
+        images (sort-by (memfn getName) (fs/list-dir (io/file jg "image")))]
+    (doseq [[xml tif] (map vector fulltexts images)]
+      (process-xml xml tif))))
+
+;;skript zum ausschneiden aller Teilbilder im gesamten Grenzboten
+(defn process-gb [root-path]
+  (let [jahrgaenge (->> (fs/list-dir (io/file root-path))
+                        (filter (memfn isDirectory)))]
+    (doseq [jg jahrgaenge] (process-jg jg))))

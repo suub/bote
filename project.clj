@@ -12,6 +12,7 @@
                  [org.clojure/data.zip "0.1.1"]
                  [org.clojure/data.xml "0.0.8"]
                  [org.clojure/data.priority-map "0.0.5"]
+                 [net.mikera/imagez "0.5.0"]
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
                  [pandect "0.3.4"]
