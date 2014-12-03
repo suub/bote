@@ -16,6 +16,7 @@
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
                  [pandect "0.3.4"]
+                 [net.mikera/imagez "0.5.0"]
                  [de.undeadco/marmoset "0.1.0-SNAPSHOT"]
                  [suub/error-codes "0.2.0-SNAPSHOT"]]
   :resource-paths ["resources"]
