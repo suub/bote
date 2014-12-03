@@ -14,6 +14,8 @@
             [clojure.zip :as z]
             [clojure.data.zip.xml :as xz]
             [pandect.core :as hash]
+            [mikera.image.core :refer :all]
+            [mikera.image.filters :as filt]
             [me.raynes.fs :as fs]))
 ;; @@
 ;; =>
