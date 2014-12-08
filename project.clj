@@ -1,11 +1,11 @@
 (defproject suub/bote "0.1.0-SNAPSHOT"
-  :jvm-opts ["-Xmx64g"]
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories {"conjars" "http://conjars.org/repo"
                  "myGrid Repository" "http://www.mygrid.org.uk/maven/repository"}
+  :jvm-opts ["-Xmx8g"]
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/math.numeric-tower "0.0.4"]
                  [org.clojure/tools.reader "0.8.8"]
@@ -18,6 +18,7 @@
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
                  [pandect "0.3.4"]
+                 [instaparse "1.3.3"]
                  [net.mikera/imagez "0.5.0"]
                  [de.undeadco/marmoset "0.1.0-SNAPSHOT"]
                  [suub/error-codes "0.2.0-SNAPSHOT"]]
