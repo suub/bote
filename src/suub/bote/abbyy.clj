@@ -16,9 +16,6 @@
             [pandect.core :as hash]
             [me.raynes.fs :as fs]))
 ;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
-;; <=
 
 ;; **
 ;;; ##Extracting information.
@@ -218,9 +215,6 @@
               z/next
               recur)))))
 ;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/change</span>","value":"#'suub.bote.abbyy/change"}
-;; <=
 
 ;; **
 ;;; ##Correction
@@ -256,4 +250,8 @@
                      (= ".xml" (fs/extension %))
                      (re-matches #"\d+" (fs/base-name % true))))
        (map #(vector (fs/base-name % true) %))))
+;; @@
+
+;; @@
+
 ;; @@

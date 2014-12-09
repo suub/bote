@@ -10,7 +10,6 @@
                  [org.clojure/tools.reader "0.8.8"]
                  [org.clojure/data.csv "0.1.2"]
                  [org.clojure/data.zip "0.1.1"]
-                 [org.clojure/data.xml "0.0.8"]
                  [org.clojure/data.priority-map "0.0.5"]
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
