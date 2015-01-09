@@ -35,12 +35,15 @@
   (with-open [in (io/reader path)]
     (let [words (->> (line-seq in)
                      (r/map #(string/split % #"\s+"))
+                     (r/remove empty?)
                      ;;use simplified form orig is not good
-                     (r/map (fn [[cnt orig simpl]] [simpl (bigint cnt)])))
+                     (r/map (fn [[cnt orig simpl]]
+                              [simpl (bigint cnt)])))
           word-count (r/fold + (r/map second words))]
       (->> words
            (r/map (fn [[w c]] [w (/ c word-count)]))
-           (into {})))))
+           (r/map (fn [[w c]] {w c}))
+           (r/fold (partial merge-with +))))))
 
 (defn read-substs [path]
   (let [subst (-> path
@@ -740,6 +743,8 @@
           correction-statistic (ec/generate-correction-statistics ocr-base-directory corrected-base-directory)]
       (spit (clojure.java.io/file corrected-base-directory "statistics.edn") (pr-str (second (first statistic))))
       (spit (clojure.java.io/file corrected-base-directory "correction-statistic.edn") (pr-str correction-statistic))
+      (spit (clojure.java.io/file corrected-base-directory "parameters")
+            (pr-str dta))
       {:statistic statistic
        :correction-statistic correction-statistic})))
 ;; @@
@@ -835,6 +840,9 @@
      ["w" "o"] 1/50
      ["n:" "m"] 1/100
      ["c" "a"] 1/50
+     ["m" "en"] 1/100
+     ["n" "ü"] 1/50
+     ["ü" "n"] 1/50
      }
     simple-subst))
 
@@ -851,9 +859,45 @@
                           "nnd"
                           "uud"))
 
+(def alphabet "abcdefghijklmnopqrstuvwxyzüäöß'")
+(def alphabet "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ")
+
+(def bar-map
+  {\A 2 \a 2 \B 2 \b 2 \C 2 \c 1 \D 2 \d 2 \E 2 \e 1 \F 2 \f 1 \G 3 \g 2
+   \H 2 \h 2 \I 2 \J 2 \i 1 \j 1 \K 2 \k 1 \L 2 \l 1 \M 4 \m 3 \N 3 \n 2
+   \O 2 \o 2 \P 3 \p 2 \Q 2 \q 2 \R 3 \r 1 \S 2 \s 2 \T 2 \t 1 \U 2 \u 2
+   \V 3 \v 2 \W 4 \w 3 \X 2 \x 1 \Y 3 \y 2 \Z 2 \z 1 \ä 2 \ö 2 \ü 2 \ß 2})
+
+(def by-bar-count
+  (group-by bar-map alphabet))
+(defn base-substitution [alphabet]
+  (into {}
+        (for [c (map str alphabet)
+              d (map str alphabet)]
+          [[c d] (if (= c d) 1 1/1000)])))
+
+(def base-subs
+  (apply merge (map base-substitution (vals by-bar-count))))
+
+(defn get-errors [cat-key error-key correction-statistic base-directory]
+  (mapcat (fn [fcs]
+         (let [gt (slurp (clojure.java.io/file base-directory "ground-truth" (first (:pages fcs))))
+               ocr (slurp (clojure.java.io/file base-directory "ocr-results" (first (:pages fcs))))]
+           (as-> fcs x
+                 (cat-key x)
+                 (group-by last x)
+                 (get x error-key)
+                 (map first x)
+                 (ec/error-words gt ocr x))))
+          correction-statistic))
+
+(def gerrit-cleaned-dict-1800+
+  (dissoc (read-dict "resources/output.merged-1800+.fuwv")
+          "nnd"))
+
+
 #_(binding [*out* (clojure.java.io/writer "/home/kima/dummyoutput.txt")]
   (evaluate-algorithm 
-   (assoc dta2 :dict cheater-dict :prefixes cheater-prfx :substs new-simple-subst)
-   "/home/kima/programming/grenzbote-files/grenzbote/abby-cleaned-neu" 
-   "/home/kima/programming/grenzbote-files/grenzbote/abby-cheater-test"
-   200))
+   (assoc dta2 :dict cheater-dict :prefixes cheater-prfx :substs new-sim)))
+
+
