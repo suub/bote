@@ -26,62 +26,16 @@
             [gorilla-renderable.core :as render]
             [marmoset.util :as marm]))
 ;; @@
-
-;; @@
-(defn read-dict [path]
-  (with-open [in (io/reader path)]
-    (let [words (->> (line-seq in)
-                     (r/map #(string/split % #"\s+"))
-                     (r/map (fn [[cnt orig simpl]] [orig (bigint cnt)])))
-          word-count (r/fold + (r/map second words))]
-      (->> words
-           (r/map (fn [[w c]] [w (/ c word-count)]))
-           (into {})))))
-
-(defn read-substs [path]
-  (let [subst (-> path
-                  slurp
-                  edn/read-string)]
-    (into {}
-          (for [[truth n] subst
-                [ocr prob] n]
-            [[ocr truth] prob]))))
-;; @@
-
-;; @@
-(defn drop-prefix
-  "Returns the rest of the seq after the prefix elements have been removed.
-   When no match can be found returns nil."
-  [prefix coll]
-  (loop [pre (seq prefix),
-         post (seq coll)]
-    (cond (empty? pre) post
-          (= (first pre) (first post)) (recur (rest pre) (rest post)))))
-;; @@
-
-;; @@
-(defn simple-matcher [p q]
-  (when-let [r (drop-prefix p q)]
-    [p r]))
-;; @@
-
-;; @@
-(defn word-prefixes [[w p]]
-  (into {}
-        (r/map (fn [n] [(subs w 0 n) p])
-          (range 0 (inc (count w))))))
-
-(defn merge-prefixes [& m]
-  (apply merge-with max m))
-
-(defn prefixes [d]
-  (->> d
-       (r/map word-prefixes)
-       (r/reduce merge-prefixes)))
-;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
 
 ;; **
-;;; #Generating possible interpretations.
+;;; ##Generating alternative interpretations.
+;;; 
+;;; Our main approach in improving the fulltext is by correcting single words produced by the OCR based on its known weaknesses in distinguishing character groups, and actual word probabilities based on existing dictionaries and word-n-grams.
+;;; 
+;;; ###A generative model.
 ;; **
 
 ;; @@
@@ -90,8 +44,12 @@
     * adapter function that makes it possible to treat complex datastructures
       such as parsed XML, as a stream of characters without destroying metainformation,
       like bounding boxes or identifiers.
+      Will take a string being matched and the word(fragment) being being processed
+      and try to overlay the string as a prefix over the word(fragment).
       In case of a match it must return a tuple of the match and the rest,
       otherwise nil.
+      Example:
+        (keyword-adapter \"he\" [:h :e :l :l :o]) => [[:h :e] [:l :l :o]]
     * Possible character group to character group missinterpretations by the OCR.
     * A heuristic to be applied while searching, similar to the distance function in A*,
       it allows for pruning search paths by returning nil and optimised search
@@ -149,15 +107,36 @@
 ;; @@
 
 ;; **
-;;; #Setup & loading
-;; **
-
-;; **
-;;; ## DTA Dictionary
+;;; ###Parameters for the generative model.
+;;; ####Adapters
 ;; **
 
 ;; @@
-(def simple-subst
+(defn string-adapter
+  "Adapter function for plain string.
+  Returns the rest of the stringafter the prefix elements have been removed
+  as well as the rest.
+  When no match can be found returns nil."
+  [p q]
+  (when-let [r (loop [pre (seq p),
+                      post (seq q)]
+                 (cond (empty? pre) post
+                       (= (first pre) (first post)) (recur (rest pre) (rest post))))]
+    [p r]))
+;; @@
+
+;; **
+;;; #### Error model.
+;;; Our error model consist of a simple mapping of groups of characters in the scanned documents and the groups of characters that they could be misrecognized as by the OCR engine to the probability at which these missrecognitions ocur.
+;;; This mans that a "u" might be misrecognized as a "n" or a combination of "rn" might be mischaracterized as a "m".
+;; **
+
+;; **
+;;; 
+;; **
+
+;; @@
+(def example-errors
         (merge
           (into {}
            (for [c "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZüäöß0123456789-,'¬"
@@ -179,122 +158,150 @@
            ["nt" "m"] 1/4}))
 ;; @@
 
-;; @@
-(def dta-dict (-> "resources/dta-freq.d/dta-core-1850+.fuw"
-                  read-dict))
-;; @@
-
-;; @@
-(def dta-prfx (time (prefixes dta-dict)))
-;; @@
-
-;; @@
-(table/table-view
-  (alternatives simple-matcher
-                simple-subst
-                dta-prfx
-                dta-dict  
-                "Hans"))
-;; @@
-
 ;; **
-;;; #Grenzboten Dictionary
+;;; #### Dictionaries and N-Grams
+;;; In addition to the probability that a word was correctly recognized from the error model,
+;;; different word probabilities without sentence context as with a dictionary or with sentence context
+;;; as with N-Grams is used.
 ;; **
 
 ;; @@
-(def grz-dict (edn/read-string (slurp "gb-dict.edn")))
-;; @@
-
-;; @@
-(def a (atom 0))
-;; @@
-
-;; @@
-(def grp (->> "gb-bigr.edn"
-              slurp
-              edn/read-string
-              (group-by ffirst)))
-;; @@
-
-;; @@
-(count grp)
-;; @@
-
-;; @@
-(marm/progress-view a (count grp))
-;; @@
-
-;; @@
-(def grz-bigr (->>
-                grp
-                seq
-                (r/fold
-                  merge
-                  (fn [acc [k v]]
-                    (let [c (apply + (map second v))]
-                      (assoc
-                        acc
-                        k
-                        (into {} (for [[[l r] p] v]
-                                   [r (/ p c)]))))))))
-;; @@
-
-;; @@
-(spit "grz-bigrfinal.edn" (pr-str grz-bigr))
+(defn index-bigrams
+  "Expects a collection of bigramms of the form
+  {[\"left\" \"right\"] count}
+  and returns a double index for the relative probability of the form
+  {\"left\" {\"right\" probability}}."
+  [bigrams]
+  (->> bigrams
+       (group-by ffirst)
+       seq
+       (r/fold
+         merge
+         (fn [acc [k v]]
+           (let [c (apply + (map second v))]
+             (assoc
+               acc
+               k
+               (into {} (for [[[l r] p] v]
+                          [r (/ p c)]))))))))
 ;; @@
 
 ;; **
-;;; ###Bigramm example.
+;;; ##### DTA
+;;; A dictionary generated from the corpus of the DTA (Deutsches Text Archiv) in Berlin.
 ;; **
 
 ;; @@
-((grz-bigr "der") "Hauf")
+(defn read-DTA-dictionary
+  "Reads a DTA dicitonary from the given path.
+  Selects the word form via the column argument,
+  either :original or :simplified."
+  [path column]
+  (with-open [in (io/reader path)]
+    (let [words (->> (line-seq in)
+                     (r/map #(string/split % #"\s+"))
+                     (r/map (fn [[cnt orig simpl]] [(case column
+                                                      :original orig
+                                                      :simplified simpl)
+                                                    (bigint cnt)])))
+          word-count (r/fold + (r/map second words))]
+      (->> words
+           (r/map (fn [[w c]] [w (/ c word-count)]))
+           (into {})))))
 ;; @@
 
 ;; @@
-
-;; @@
-
-;; @@
-(table/table-view
-  (alternatives simple-matcher
-                simple-subst
-                dta-prfx
-                #(* (dta-dict %) (or ((grz-bigr "der") %) 0)) 
-                "Hans"))
-;; @@
-
-;; @@
-(table/table-view
-  (alternatives simple-matcher
-                simple-subst
-                dta-prfx
-                #(when-let [b ((grz-bigr "der") %)] (* (dta-dict %) b))
-                "Hans"))
+(def DTA-dictionary (read-DTA-dictionary "resources/dta-freq.d/dta-core-1850+.fuw"
+                                         :simple))
 ;; @@
 
 ;; **
-;;; ## Gold-Potsdam Dictionary
+;;; ####Grenzbote
+;;; A dictionary and bigrams generated from the raw grenzboten material itself.
 ;; **
 
 ;; @@
-(def gold-subst (read-substs "resources/substitutions.edn"))
+(defn read-grenzbote-ngram [path n]
+  (->> path
+       abbyy/files
+       (pmap #(->> %
+                   (do (swap! a inc))
+                   second
+                   xml/parse
+                   abbyy/lines
+                   abbyy/remove-linewrap
+                   (mapv abbyy/text)))
+       (apply concat)
+       (partition n 1)
+       frequencies))
 ;; @@
 
 ;; @@
-(def pots-dict (->> "resources/dict.edn"
-                    slurp
-                    edn/read-string
-                    (map #(update-in % [1] bigint))
-                    (into {})))
-;; @@
-
-;; @@
-(def pots-prfx (time (prefixes pots-dict)))
+(def grenzbote-dictionary (edn/read-string (slurp "resources/gb-dict.edn")))
+(def grenzbote-bigrams    (edn/read-string (slurp "resources/gb-bigr.edn")))
 ;; @@
 
 ;; **
-;;; #Deployment code
+;;; ##### Potsdam Dictionary
+;; **
+
+;; @@
+(def potsdam-dictionary (->> "resources/potsdam-dict.edn"
+                              slurp
+                              edn/read-string
+                              (map #(update-in % [1] bigint))
+                              (into {})))
+;; @@
+
+;; **
+;;; ####Heuristics
+;;; Alternatives are generated lazily in ascending probability order.
+;;; This is done to improve the runtime of the general correction case,
+;;; where one is only interested in the most probable alternative.
+;;; 
+;;; To do this the generative model employs a heuristic function to prioritize the search space similar to the @@A*@@ algoritm. This function will map partial runs of the search space in the form of the prefix analyzed so far to the best possible outcome when following this search path.
+;;; 
+;;; For words from a dictionary this means the highest probability of a word with this prefix.
+;; **
+
+;; @@
+(defn word-prefixes
+  "Generate all prefixes for a given word."
+  [[w p]]
+  (into {}
+        (r/map (fn [n] [(subs w 0 n) p])
+          (range 0 (inc (count w))))))
+
+(defn merge-prefixes [& m]
+  (apply merge-with max m))
+
+(defn heuristic-for-dictionary
+  "Will create a mapping from every prefix of every word
+  to the highest probability that can be "
+  [dictionary]
+  (->> dictionary
+       (r/map word-prefixes)
+       (r/reduce merge-prefixes)))
+;; @@
+
+;; **
+;;; ##### DTA
+;; **
+
+;; @@
+(def DTA-heuristic (heuristic-for-dictionary DTA-dictionary))
+;; @@
+
+;; **
+;;; ##### Potsdam
+;; **
+
+;; @@
+(def potsdam-heuristic (time (prefixes pots-dict)))
+;; @@
+
+;; **
+;;; ##Correction
 ;; **
 
 ;; @@
@@ -351,7 +358,7 @@
 ;; @@
 
 ;; **
-;;; #Difficult words
+;;; ##Difficult words
 ;; **
 
 ;; @@
@@ -375,12 +382,6 @@
 ;; @@
 
 ;; @@
-(future (doseq [i (range 10000)]
-          (swap! a inc)
-          (Thread/sleep 1)))
-;; @@
-
-;; @@
 (def f (future
   (time (dorun
   (pmap #(do
@@ -388,55 +389,4 @@
            (spit (str "/Users/ticking/Desktop/test" (first %) ".xml")
                (with-out-str (xml/emit (correct (xml/parse (second %)) dta)))))
         files)))))
-;; @@
-
-;; @@
-(def a (atom 0))
-;; @@
-
-;; @@
-(reset! a 0)
-;; @@
-
-;; @@
-(progress-view a (count (files "/Users/ticking/Desktop/vls-ro")))
-;; @@
-
-;; @@
-(def di (->> "/Users/ticking/Desktop/vls-ro/"
-             abbyy/files
-             (pmap #(->> %
-                         (do (swap! a inc))
-                         second
-                         xml/parse
-                         abbyy/lines
-                         abbyy/remove-linewrap
-                         (mapv abbyy/text)))
-             (apply concat)
-             frequencies
-             future))
-;; @@
-
-;; @@
-(def bigrams (->> "/Users/ticking/Desktop/vls-ro/"
-             abbyy/files
-             (pmap #(->> %
-                         (do (swap! a inc))
-                         second
-                         xml/parse
-                         abbyy/lines
-                         abbyy/remove-linewrap
-                         (mapv abbyy/text)))
-             (apply concat)
-             (partition 2 1)
-             frequencies
-             future))
-;; @@
-
-;; @@
-(apply max-key second @di)
-;; @@
-
-;; @@
-(apply max-key second @bigrams)
 ;; @@
