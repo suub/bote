@@ -11,6 +11,7 @@
                  [org.clojure/data.csv "0.1.2"]
                  [org.clojure/data.zip "0.1.1"]
                  [org.clojure/data.priority-map "0.0.5"]
+                 [net.bendlas/data.xml "1.0.0-SNAPSHOT"]
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/timbre "3.3.1"]
                  [pandect "0.3.4"]
@@ -18,4 +19,4 @@
                  [de.undeadco/marmoset "0.1.0-SNAPSHOT"]
                  [suub/error-codes "0.2.0-SNAPSHOT"]]
   :resource-paths ["resources"]
-  :plugins [[lein-gorilla "0.3.4-SNAPSHOT"]])
+  :plugins [[lein-gorilla "0.3.5-SNAPSHOT"]])
