@@ -9,7 +9,7 @@
 ;; @@
 (ns suub.bote.dict
   (:require ;[gorilla-plot.core :as plot]
-            ;[gorilla-repl.table :as table]
+            ;[gorilla-repl.table
             [clojure.core.reducers :as r]
             [suub.bote.util :as util]
             [suub.bote.abbyy :as abbyy]
@@ -159,14 +159,14 @@
 ;; **
 
 ;; @@
-(defonce dta-dict (read-dict "resources/dta-freq.d/dta-core.fuw"))
+#_(defonce dta-dict (read-dict "resources/dta-freq.d/dta-core.fuw"))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/dta-dict</span>","value":"#'suub.bote.dict/dta-dict"}
 ;; <=
 
 ;; @@
-(def dta-dict (dissoc dta-dict
+#_(def dta-dict (dissoc dta-dict
                 "angezogeuen"
                 "uach"
                 "naeh"
@@ -608,7 +608,7 @@
 ;; <=
 
 ;; @@
-(defonce dta-prfx (time (prefixes dta-dict)))
+#_(defonce dta-prfx (time (prefixes dta-dict)))
 ;;(def pots-prfx (time (prefixes pots-dict)))
 
 ;; @@
@@ -623,8 +623,8 @@
 ;; @@
 
 (def dta2 {:matcher simple-matcher
-           :dict dta-dict
-           :prefixes dta-prfx
+         ;;  :dict dta-dict
+        ;;   :prefixes dta-prfx
             :substs simple-subst})
 #_(def pots {:matcher simple-matcher
            :dict pots-dict
