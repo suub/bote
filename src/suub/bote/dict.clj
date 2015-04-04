@@ -16,6 +16,7 @@
             [clojure.test :as t]
             [taoensso.timbre :as log]
             [clojure.java.io :as io]
+            [me.raynes.laser :as l]
             [suub.bote.clojure.xml :as xml]
             [clojure.string :as string]
             [clojure.data.priority-map :as pm]
@@ -23,6 +24,7 @@
             [instaparse.combinators :as instac]
             [clojure.edn :as edn]
             [me.raynes.fs :as fs]
+            [laser-experiments.core :as le]
             [suub.bote.abbyy :as abbyy]
             [error-codes.files :as ec]))
 ;; @@
@@ -740,11 +742,13 @@
     (ec/deploy-error-codes corrected-base-directory)
     (println "starte Auswärtung")
     (let [statistic (ec/gen-statistics-for-base-directories [corrected-base-directory])
+          word-statistic (ec/gen-word-statistics-for-base-directories [corrected-base-directory])
           correction-statistic (ec/generate-correction-statistics ocr-base-directory corrected-base-directory)]
       (spit (clojure.java.io/file corrected-base-directory "statistics.edn") (pr-str (second (first statistic))))
+      (spit (clojure.java.io/file corrected-base-directory "word-statistics.edn") (pr-str (second (first word-statistic))))
       (spit (clojure.java.io/file corrected-base-directory "correction-statistic.edn") (pr-str correction-statistic))
       (spit (clojure.java.io/file corrected-base-directory "parameters")
-            (pr-str dta))
+            (pr-str (dissoc dta :matcher)))
       {:statistic statistic
        :correction-statistic correction-statistic})))
 ;; @@
@@ -899,5 +903,157 @@
 #_(binding [*out* (clojure.java.io/writer "/home/kima/dummyoutput.txt")]
   (evaluate-algorithm 
    (assoc dta2 :dict cheater-dict :prefixes cheater-prfx :substs new-sim)))
+(defn write-to [vlids texts dir]
+  (doseq [[vlid text] (map vector vlids texts)]
+    (spit (clojure.java.io/file dir (str vlid ".txt")) text)))
+
+(defn download-vlids-to [vlids dir]
+  (let [texts (map le/abby-plaintext vlids)]
+    (write-to vlids texts dir)))
+
+;;;;;;;;;;;;;;;;;;;;;laser stuff ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn get-article-url [article]
+  (-> (l/select (l/zip article) (l/attr? :xlink:href))
+      first
+      (get-in [:attrs :xlink:href])))
+
+(defn get-article-doc [article]
+  (le/doc-from-url (get-article-url article)))
+
+
+(defn get-vlids [article-doc]
+  (->>
+   (l/select article-doc
+             (l/descendant-of (l/and (l/element= :mets:structmap)
+                                     (l/attr= :type "PHYSICAL"))
+                              (l/and (l/element= :mets:div)
+                                     (l/attr? :order))))
+   (map #(get-in % [:attrs :id]))
+   (map #(.substring % 4))
+   (map #(Integer/parseInt %))))
+
+(defn article-vlids [article]
+  (-> article
+      get-article-doc
+      get-vlids))
+
+(defn words-on-page
+  "page as string"
+  [page]
+  (->> page
+      ((comp #(.split % "[^abcdefghijklmnopqrstuvwxyzäöüßABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ]")
+             #(.replaceAll (.replace (.replace % "-\n" "") "¬\n" "") "[?!.,:]" "")))
+      (remove empty?)))
+
+
+(defn page-statistic
+  "with optional predicate to filter words by"
+  ([dict page] (page-statistic dict page identity))
+  ([dict page pred]
+   (let [words (filter pred (words-on-page page))
+         not-in-dict (remove #(get dict %) words)]
+     {:all-words words
+      :not-in-dict not-in-dict
+      :error-rate (if (= 0 (count words)) 100
+                      (double (* 100 (/ (count not-in-dict) (count words)))))})))
+
+
+(defn site-statistic [dict vlid]
+  (page-statistic dict (le/abby-plaintext vlid)))
+
+#_(def grenzbote-vlids
+  (for [jg le/jg-docs
+        vol (le/volume-docs jg)
+        artcl (le/select-article vol)
+        vlid (article-vlids artcl)]
+    vlid))
+
+(def grenzbote-vlids
+  (clojure.set/difference
+   (read-string (slurp "vlids-maik+mn.edn"))
+   (read-string (slurp "maik-ohne-mn.edn"))))
+
+(defn generate-site-statistic [dict vlids dir]
+  (doseq [vlid vlids]
+    (spit (io/file dir (str vlid ".edn"))
+          (pr-str (site-statistic dict vlid)))))
+
+
+(defn get-lines [vlid]
+  (.split (le/abby-plaintext vlid) "\n"))
+
+
+(defn generate-line-statistic [dict vlids dir]
+  (doseq [vlid vlids
+          [line num] (map vector (get-lines vlid) (range))]
+    (spit (io/file dir (str vlid "-" num ".edn"))
+          (pr-str (page-statistic dict line)))))
+
+(comment
+  (def processed
+                  (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
+                       file-seq
+                       rest
+                       (map (memfn getName))
+                       (map #(.substring % 0 (- (count %) 4)))
+                       (map #(Integer/parseInt %))))
+  (do (def processed
+                  (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
+                       file-seq
+                       rest
+                       (map (memfn getName))
+                       (map #(.substring % 0 (- (count %) 4)))
+                       (map #(Integer/parseInt %))))
+                    
+                    (def remaining (clojure.set/difference (into #{} grenzbote-vlids) (into #{} processed)))
+                    
+                    [(count remaining)
+                    (double (* 100 (/ (- (count grenzbote-vlids) (count remaining) ) (count grenzbote-vlids))))])
+
+  (defn ex-watcher [] (try @f (catch Exception e (do (def processed
+                  (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
+                       file-seq
+                       rest
+                       (map (memfn getName))
+                       (map #(.substring % 0 (- (count %) 4)))
+                       (map #(Integer/parseInt %))))
+                    
+                    (def remaining (clojure.set/difference (into #{} grenzbote-vlids) (into #{} processed)))
+                    
+                    [(count remaining)
+                    (double (* 100 (/ (- (count grenzbote-vlids) (count remaining) ) (count grenzbote-vlids))))]
+                    (def idiot (Integer/parseInt (second (re-find #"fulltext/fr/([0-9]+)" (.getMessage e)))))
+                    (def wrong-vlids (clojure.set/union wrong-vlids #{idiot}))
+                    (spit "wrong-vlids.edn" (pr-str wrong-vlids))
+                    (def remaining-filtered (clojure.set/difference remaining wrong-vlids))
+                    (def f (future (generate-site-statistic dict remaining-filtered "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/") ))
+                    (ex-watcher))))))
+
+
+(defn generate-entity-statistics
+  ([dir entities] (generate-entity-statistics dir entities 0))
+  ([dir entities allowed-errors]
+   (let [gt (ec/get-files-sorted 
+             (io/file dir "ground-truth"))
+         ocr (ec/get-files-sorted
+              (io/file dir "ocr-results"))
+         entities (into #{} entities)
+         matching-entities (fn [word]
+                             (if (= 0 allowed-errors)
+                               [(entities word)]
+                               (for [ent entities
+                                     :when (<= (:distance (ec/edits word ent)) allowed-errors)]
+                                 ent)))
+         build-map (fn [files]
+                     (merge (into {} (for [ent entities] [ent {}]))
+                            (apply merge-with #(merge-with + %1 %2)
+                                   (for [f files
+                                         word (words-on-page (slurp f))
+                                         ent (matching-entities word)]
+                                     {ent {word 1}}))))
+         entities-in-gt (build-map gt)
+         entities-in-ocr (build-map ocr)]
+     (merge-with vector entities-in-gt entities-in-ocr))))
 
 

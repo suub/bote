@@ -21,6 +21,9 @@
                  [instaparse "1.3.3"]
                  [net.mikera/imagez "0.5.0"]
                  [de.undeadco/marmoset "0.1.0-SNAPSHOT"]
-                 [suub/error-codes "0.2.0-SNAPSHOT"]]
+                 [suub/error-codes "0.2.2-SNAPSHOT"]
+                 [org.clojure/tools.nrepl "0.2.7"]
+                 [suub/laser-experiments "0.1.0-SNAPSHOT"]]
   :resource-paths ["resources"]
-  :plugins [[lein-gorilla "0.3.4-SNAPSHOT"]])
+  :plugins [[cider/cider-nrepl "0.9.0-SNAPSHOT"]
+            [lein-gorilla "0.3.4-SNAPSHOT"]])
