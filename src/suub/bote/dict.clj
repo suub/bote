@@ -1079,3 +1079,58 @@
      (build-map ocr))))
 
 
+
+;;;;;;;;;;;;;;;; fehlertyp statistik ;;;
+
+(defn error-type-statistic [base-directory]
+  (let [gt (map slurp (ec/get-files-sorted (io/file base-directory "ground-truth")))
+        ocr (map slurp (ec/get-files-sorted (io/file base-directory "ocr-results")))
+        error-codes (map (comp read-string slurp) (ec/get-files-sorted (io/file base-directory "edits")))
+        error-types (mapcat (fn [gt ocr edits]
+                         (map #(second (ec/augment-error-code gt ocr %)) edits))
+                       gt ocr error-codes)]
+    (sort-by second (frequencies error-types))))
+;; (def error-type-frequencies (error-type-statistic "/home/noelte/clojure/ocr-engine-results/abby-more-text/"))
+;; suub.bote.dict> (spit "error-type-frequencies.edn" (pr-str error-type-frequencies))
+
+(defn sorted-error-number-deltas [base-directory-ocr base-directory-corrected]
+  (let [ocr-files (ec/get-files-sorted (io/file base-directory-ocr "edits"))
+        corr-files (ec/get-files-sorted (io/file base-directory-corrected "edits"))
+        ; list-vlid-error-number-ocr (map (fn [x] [(first  (string/split (.getName x) #"\.")) (count (read-string (slurp x)))]) ocr-files)
+        ; list-vlid-error-number-corr (map (fn [x] [(first  (string/split (.getName x) #"\.")) (count (read-string (slurp x)))]) corr-files)
+
+        list-vlid-error-deltas (map (fn [ocr corr] 
+                                      [(first  (string/split (.getName ocr) #"\."))
+                                       (- (count (read-string (slurp ocr))) (count (read-string (slurp corr))))])
+                                    ocr-files corr-files)]
+    (sort-by second  list-vlid-error-deltas)))
+
+
+
+(defn get-current-params []
+  (let [dict-unfiltered (read-dict "resources/current-params/dict.fuwv")
+        todelete (line-seq (io/reader "resources/current-params/removed-words-from-dict.txt"))
+        dict (reduce dissoc dict-unfiltered todelete)
+        substs (read-string (slurp "resources/current-params/substs.edn"))]
+    {:matcher simple-matcher
+     :dict dict
+     :prefixes (prefixes dict)
+     :substs substs}))
+
+(comment to run
+ (def f (future (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                  (evaluate-algorithm
+                 (get-current-params)
+                 "/home/noelte/clojure/ocr-engine-results/<start-dir>"
+                 "/home/noelte/clojure/ocr-engine-results/<result-dir>"
+                 num-pages)))))
+
+
+
+
+
+ (def f (future
+          (do 
+            (nummer 1)
+            (spit "progess"  "nummer 1 erledigt" :append true)
+            (nummer 2)))))
