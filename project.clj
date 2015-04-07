@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories {"conjars" "http://conjars.org/repo"
                  "myGrid Repository" "http://www.mygrid.org.uk/maven/repository"}
-  :jvm-opts ["-Xmx8g"]
+  :jvm-opts ["-Xmx6g"]
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/math.numeric-tower "0.0.4"]
                  [org.clojure/tools.reader "0.8.8"]
