@@ -858,7 +858,7 @@
     (into {} (for [[k v] (frequencies words)]
                [k (/ v word-count)]))))
 
-(def cheater-dict (dissoc (generate-cheater-dict)
+#_(def cheater-dict (dissoc (generate-cheater-dict)
                           "iu"
                           "nnd"
                           "uud"))
@@ -895,7 +895,7 @@
                  (ec/error-words gt ocr x))))
           correction-statistic))
 
-(def gerrit-cleaned-dict-1800+
+#_(def gerrit-cleaned-dict-1800+
   (dissoc (read-dict "resources/output.merged-1800+.fuwv")
           "nnd"))
 
@@ -1055,5 +1055,27 @@
          entities-in-gt (build-map gt)
          entities-in-ocr (build-map ocr)]
      (merge-with vector entities-in-gt entities-in-ocr))))
+
+(defn generate-single-entity-statistics
+  "only ocr"
+  ([dir entities] (generate-single-entity-statistics dir entities 0))
+  ([dir entities allowed-errors]
+   (let [ocr (ec/get-files-sorted
+              (io/file dir "ocr-results"))
+         entities (into #{} entities)
+         matching-entities (fn [word]
+                             (if (= 0 allowed-errors)
+                               [(entities word)]
+                               (for [ent entities
+                                     :when (<= (:distance (ec/edits word ent)) allowed-errors)]
+                                 ent)))
+         build-map (fn [files]
+                     (merge (into {} (for [ent entities] [ent {}]))
+                            (apply merge-with #(merge-with + %1 %2)
+                                   (for [f files
+                                         word (words-on-page (slurp f))
+                                         ent (matching-entities word)]
+                                     {ent {word 1}}))))]
+     (build-map ocr))))
 
 
