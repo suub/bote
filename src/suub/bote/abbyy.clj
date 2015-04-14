@@ -19,6 +19,7 @@
 
 ;; **
 ;;; ##Extracting information.
+;;; The OCR-Engine associates metadata relevant to the recognition process with the input images like the angle it was skewed.
 ;; **
 
 ;; @@
@@ -40,6 +41,11 @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/page-info</span>","value":"#'suub.bote.abbyy/page-info"}
 ;; <=
+
+;; **
+;;; ##Zones
+;;; We use zones in the source image to identify recognized elements like lines and letters.
+;; **
 
 ;; @@
 (defn zone
@@ -79,6 +85,12 @@
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/zone&gt;bbox</span>","value":"#'suub.bote.abbyy/zone>bbox"}
 ;; <=
 
+;; **
+;;; ##OCR elements
+;;; The OCR output consists of different elements, pages > lines > words > characters, in a hierarchical nesting.
+;;; When post processing a page it makes sense to look at different element types in different correction steps.
+;; **
+
 ;; @@
 (defn characters
   "Extracts all character zones with their relevant data."
@@ -110,6 +122,11 @@
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/lines</span>","value":"#'suub.bote.abbyy/lines"}
 ;; <=
 
+;; **
+;;; To enable the correction of all words it is neccesary to remove all line-wraps and accompanying separation characters.
+;;; The line-wraps of the corrected results are unaffected by this step, because correction is fundamentaly a character level operation even though it will use word level information for descision making.
+;; **
+
 ;; @@
 (def alphabet (set "abcdefghijklmnopqrstuvwxyzäöüßABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ"))
 (def linewrap (set "-¬"))
@@ -133,34 +150,10 @@
                       (concat words line))))))
        (filter #(-> % first :char alphabet))))
 ;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/remove-linewrap</span>","value":"#'suub.bote.abbyy/remove-linewrap"}
-;; <=
-
-;; @@
-(defn text [e]
-  (->> e
-       flatten
-       (map :char)
-       (apply str)))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/text</span>","value":"#'suub.bote.abbyy/text"}
-;; <=
-
-;; @@
-(defn page-text [p]
-  (apply str (map (fn [l]
-                    (str (text l)
-                         "\n"))
-                  (lines p))))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/page-text</span>","value":"#'suub.bote.abbyy/page-text"}
-;; <=
 
 ;; **
 ;;; ##Reintegrating data into XML documents.
+;;; The final step of correction incorporates the changes produced by the correction algorithm into original xml document. 
 ;; **
 
 ;; @@
@@ -218,10 +211,11 @@
 
 ;; **
 ;;; ##Correction
+;;; A custom adapter function is required for handling xml based OCR data.
 ;; **
 
 ;; @@
-(defn matcher [matcher query]
+(defn abbyy-adapter [matcher query]
   (loop [match []
          mrest (seq matcher)
          qrest (seq query)]
@@ -242,6 +236,23 @@
 ;; **
 
 ;; @@
+(defn text [e]
+  (->> e
+       flatten
+       (map :char)
+       (apply str)))
+
+(defn page-text [p]
+  (apply str (map (fn [l]
+                    (str (text l)
+                         "\n"))
+                  (lines p))))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.abbyy/text</span>","value":"#'suub.bote.abbyy/text"}
+;; <=
+
+;; @@
 (defn files [path]
   (->> path
        io/file
@@ -250,8 +261,4 @@
                      (= ".xml" (fs/extension %))
                      (re-matches #"\d+" (fs/base-name % true))))
        (map #(vector (fs/base-name % true) %))))
-;; @@
-
-;; @@
-
 ;; @@

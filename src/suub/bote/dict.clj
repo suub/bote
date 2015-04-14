@@ -10,7 +10,7 @@
 (ns suub.bote.dict
   (:require [gorilla-plot.core :as plot]
             [gorilla-repl.table :as table]
-            [error-codes.gorilla :as gv]
+           ; [error-codes.gorilla :as gv]
             [gorilla-repl.html :as gh]
             [clojure.core.reducers :as r]
             [clojure.core.async :as a]
@@ -24,7 +24,8 @@
             [me.raynes.fs :as fs]
             [suub.bote.abbyy :as abbyy]
             [gorilla-renderable.core :as render]
-            [marmoset.util :as marm]))
+            [marmoset.util :as marm]
+            [error-codes.files :as ec]))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
@@ -105,6 +106,9 @@
                   1))
          (map #(dissoc % :rest)))))
 ;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/alternatives</span>","value":"#'suub.bote.dict/alternatives"}
+;; <=
 
 ;; **
 ;;; ###Parameters for the generative model.
@@ -124,15 +128,14 @@
                        (= (first pre) (first post)) (recur (rest pre) (rest post))))]
     [p r]))
 ;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/string-adapter</span>","value":"#'suub.bote.dict/string-adapter"}
+;; <=
 
 ;; **
 ;;; #### Error model.
 ;;; Our error model consist of a simple mapping of groups of characters in the scanned documents and the groups of characters that they could be misrecognized as by the OCR engine to the probability at which these missrecognitions ocur.
 ;;; This mans that a "u" might be misrecognized as a "n" or a combination of "rn" might be mischaracterized as a "m".
-;; **
-
-;; **
-;;; 
 ;; **
 
 ;; @@
@@ -157,6 +160,9 @@
            ["^" "s"] 1
            ["nt" "m"] 1/4}))
 ;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/example-errors</span>","value":"#'suub.bote.dict/example-errors"}
+;; <=
 
 ;; **
 ;;; #### Dictionaries and N-Grams
@@ -185,6 +191,9 @@
                (into {} (for [[[l r] p] v]
                           [r (/ p c)]))))))))
 ;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/index-bigrams</span>","value":"#'suub.bote.dict/index-bigrams"}
+;; <=
 
 ;; **
 ;;; ##### DTA
@@ -200,10 +209,11 @@
   (with-open [in (io/reader path)]
     (let [words (->> (line-seq in)
                      (r/map #(string/split % #"\s+"))
-                     (r/map (fn [[cnt orig simpl]] [(case column
+                     (r/map (fn [[cnt orig simpl]] {(case column
                                                       :original orig
                                                       :simplified simpl)
-                                                    (bigint cnt)])))
+                                                    (bigint cnt)}))
+                     (r/fold (partial merge-with +)))
           word-count (r/fold + (r/map second words))]
       (->> words
            (r/map (fn [[w c]] [w (/ c word-count)]))
@@ -212,7 +222,7 @@
 
 ;; @@
 (def DTA-dictionary (read-DTA-dictionary "resources/dta-freq.d/dta-core-1850+.fuw"
-                                         :simple))
+                                         :simplified))
 ;; @@
 
 ;; **
@@ -225,7 +235,6 @@
   (->> path
        abbyy/files
        (pmap #(->> %
-                   (do (swap! a inc))
                    second
                    xml/parse
                    abbyy/lines
@@ -283,6 +292,9 @@
        (r/map word-prefixes)
        (r/reduce merge-prefixes)))
 ;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/heuristic-for-dictionary</span>","value":"#'suub.bote.dict/heuristic-for-dictionary"}
+;; <=
 
 ;; **
 ;;; ##### DTA
@@ -301,92 +313,265 @@
 ;; @@
 
 ;; **
-;;; ##Correction
+;;; ##Evaluation
 ;; **
 
 ;; @@
-(defn correct [p idx]
-  (abbyy/change
-    (->> p
-      abbyy/lines
-      abbyy/remove-linewrap
-      (map #(first (alternatives idx %)))
-      (remove nil?)
-      (mapcat :substs))
-    p))
-;; @@
+(defn penalty-for-dictionary-and-bigrams [dictionary bigrams default-penalty]
+  (fn [last-word word]
+    (let [d (dictionary word)
+          b (or (get (bigrams last-word) word) default-penalty)]
+      (when d (* d b)))))
 
+(defn correct-page [substs heuristic-penalty dictionary bigrams default-bigram-penalty page-xml] 
+  (let [final-penalty (penalty-for-dictionary-and-bigrams
+                        dictionary
+                        bigrams
+                        default-bigram-penalty)]  
+    (as-> page-xml %
+          (abbyy/lines %)
+          (abbyy/remove-linewrap %)
+          (reduce (fn [[acc lst] val]
+                    (let [alternative
+                          (and (not (dictionary (abbyy/text val)))
+                               (Character/isLetterOrDigit (first (abbyy/text val)))
+                               (first (alternatives abbyy/abbyy-adapter
+                                                    substs
+                                                    heuristic-penalty
+                                                    #(final-penalty lst %)
+                                                    val)))]
+                      [(conj acc alternative) (abbyy/text alternative)]))
+                  [[] nil]
+                  (rest %))
+          (first %)
+          (mapcat :substs %)
+          (abbyy/change % page-xml))))
 ;; @@
-(defn text [p]
-  (apply str (map (fn [l]
-                    (str (apply str
-                                (map :char l))
-                         "\n"))
-                  (abbyy/lines p))))
-;; @@
-
-;; @@
-(defn download-xml [vlid]
-  (xml/parse-str-raw
-    (slurp (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" vlid))
-    {:preserve-whitespace true}))
-;; @@
-
-;; @@
-(def pages
-  (into {}
-    (->> "resources/ground-truth"
-         io/file
-         file-seq
-         (filter fs/file?)
-         (map #(vector (fs/base-name % true)
-                       {:truth (slurp %)
-                        :raw (download-xml (fs/base-name % true))})))))
-;; @@
-
-;; @@
-
-(apply str (take 1000 (xml/emit-str (:raw (first (vals pages))))))
-
-;; @@
-
-;; @@
-(time (doall
-  (pmap #(spit (str "corrected/" (first %) ".xml")
-               (xml/emit-str-raw (correct (second %) dta)))
-        x)))
-;; @@
-
-;; **
-;;; ##Difficult words
-;; **
-
-;; @@
-(def difficult (filter #(not= % (->> %
-                                    (transform dta)
-                                    first
-                                    :word))
-                       (keys (:dict dta))))
-;; @@
-
-;; @@
-(table/table-view (take 20 (filter second
-                                   (map (fn [w] (let [r (take 10 (transform dta w))]
-                                          [w
-                                           (:word (first r))
-                                           (plot/bar-chart
-                                             (map :word r)
-                                             (map :prob r)
-                                             :plot-size 600)]))
-                                difficult))))
-;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/correct-page</span>","value":"#'suub.bote.dict/correct-page"}
+;; <=
 
 ;; @@
 (def f (future
   (time (dorun
   (pmap #(do
-           (swap! a inc)
            (spit (str "/Users/ticking/Desktop/test" (first %) ".xml")
-               (with-out-str (xml/emit (correct (xml/parse (second %)) dta)))))
+               (with-out-str (xml/emit-str-raw (correct (xml/parse-str-raw (second %) {:preserve-whitespace true}) dta)))))
         files)))))
+;; @@
+
+;; @@
+(defn evaluate-algorithm [substs heuristic-penalty dictionary bigrams default-bigram-penalty
+                          ocr-base-directory corrected-base-directory num-pages]
+  (.mkdirs (io/file corrected-base-directory))
+  (.mkdir (io/file corrected-base-directory "ground-truth"))
+  (doseq [f (take num-pages (ec/get-files-sorted (io/file ocr-base-directory "ground-truth")))]
+    (println "f " f)
+    (io/copy f (io/file corrected-base-directory "ground-truth" (.getName f))))
+  (.mkdir (io/file corrected-base-directory  "edits"))
+  (.mkdir (io/file corrected-base-directory "ocr-results"))
+  (let [ocr-text (->> (ec/get-files-sorted 
+                        (io/file ocr-base-directory "ocr-xml-results"))
+                      (take num-pages))]
+    (println "starte Nachkorrektur")
+    (doall 
+      (pmap #(as-> % x
+                  (do (println x) x)
+                  (slurp x)
+                  (xml/parse-str-raw x :preserve-whitespace true)
+                  (correct-page substs heuristic-penalty dictionary bigrams default-bigram-penalty x)
+                  (abbyy/page-text x)
+                  (spit (io/file corrected-base-directory "ocr-results" (.getName %)) x))
+            ocr-text))
+    	
+    (println "starte Auszählung")
+    (ec/deploy-error-codes corrected-base-directory)
+    (println "starte Auswärtung")
+    (let [statistic (ec/gen-statistics-for-base-directories [corrected-base-directory])
+          correction-statistic (ec/generate-correction-statistics ocr-base-directory corrected-base-directory)]
+      (spit (clojure.java.io/file corrected-base-directory "statistics.edn") (pr-str (second (first statistic))))
+      (spit (clojure.java.io/file corrected-base-directory "correction-statistic.edn") (pr-str correction-statistic))
+      (spit (clojure.java.io/file corrected-base-directory "parameters") (pr-str [substs heuristic-penalty dictionary bigrams default-bigram-penalty]))
+      {:statistic statistic
+       :correction-statistic correction-statistic})))
+
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/evaluate-algorithm</span>","value":"#'suub.bote.dict/evaluate-algorithm"}
+;; <=
+
+;; @@
+(map #(spit (str "/Users/ticking/Desktop/gt/" % ".xml") (slurp (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" %))) files)
+;; @@
+
+;; @@
+(binding [*out* (clojure.java.io/writer "output.txt")]
+  (evaluate-algorithm gerrit-substitutions
+                      gerrit-heuristic
+                      gerrit-dictionary
+                      grenzbote-bigrams
+                      1/10000
+                      "/Users/ticking/Desktop/ocr-engine-results/abby-more-text"
+                      "/Users/ticking/Desktop/bigram-correction-results" 200))
+;; @@
+
+;; @@
+(binding [*out* (clojure.java.io/writer "output.txt")]
+  (evaluate-algorithm gerrit-substitutions
+                      gerrit-heuristic
+                      gerrit-dictionary
+                      {}
+                      1
+                      "/Users/ticking/Desktop/ocr-engine-results/abby-more-text"
+                      "/Users/ticking/Desktop/bigram-correction-results2" 200))
+;; @@
+
+;; @@
+(->> "/Users/ticking/Desktop/ocr-engine-results/abby-more-text/ground-truth"
+     io/file
+     file-seq
+     (filter #(and (fs/file? %)
+                   (= ".txt" (fs/extension %))
+                   (re-matches #"\d+" (fs/base-name % true))))
+     (map #(fs/base-name % true))
+     (pmap #(spit (str "/Users/ticking/Desktop/gt/" % ".txt")
+                  (slurp (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" %))))
+     dorun)
+;; @@
+
+;; **
+;;; ##Correction
+;; **
+
+;; @@
+(def params (read-string (slurp "/Users/ticking/Desktop/ocr-engine-results/abby-cleaned-gerrit-1800/parameters")))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/params</span>","value":"#'suub.bote.dict/params"}
+;; <=
+
+;; @@
+(def gerrit-substitutions (:substs params))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/gerrit-substitutions</span>","value":"#'suub.bote.dict/gerrit-substitutions"}
+;; <=
+
+;; @@
+(def gerrit-dictionary (:dict params))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/gerrit-dictionary</span>","value":"#'suub.bote.dict/gerrit-dictionary"}
+;; <=
+
+;; @@
+(def gerrit-heuristic (heuristic-for-dictionary gerrit-dictionary))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/gerrit-heuristic</span>","value":"#'suub.bote.dict/gerrit-heuristic"}
+;; <=
+
+;; @@
+(defn correct-page [substs heuristic-penalty final-penalty page-xml] 
+  (as-> page-xml %
+        (abbyy/lines %)
+        (abbyy/remove-linewrap %)
+        (map (fn [v]
+                 (and (not (final-penalty (abbyy/text v)))
+                      (Character/isLetterOrDigit (first (abbyy/text v)))
+                      (first (alternatives abbyy/abbyy-adapter
+                                           substs
+                                           heuristic-penalty
+                                           final-penalty
+                                           v))))
+             %)
+        (mapcat :substs %)
+        (abbyy/change % page-xml)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/correct-page</span>","value":"#'suub.bote.dict/correct-page"}
+;; <=
+
+;; @@
+(def c (atom 0))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/c</span>","value":"#'suub.bote.dict/c"}
+;; <=
+
+;; @@
+(def f
+(->> "/Volumes/5TB/data/"
+     io/file
+     file-seq
+     (filter #(and (fs/file? %)
+                   (= ".xml" (fs/extension %))
+                   (re-matches #"\d+" (fs/base-name % true))))
+     (pmap (fn [v]
+             (swap! c inc)
+             (as-> v x
+                  (slurp x)
+                  (xml/parse-str-raw x :preserve-whitespace true)
+                  (correct-page gerrit-substitutions gerrit-heuristic gerrit-dictionary x)
+                  (xml/emit-str-raw x)
+                  (spit (str "/Volumes/4TB/processed/" (fs/base-name v true) ".xml") x))))
+     dorun
+     future))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/f</span>","value":"#'suub.bote.dict/f"}
+;; <=
+
+;; @@
+c
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-atom'>#&lt;Atom@57e3677: 186740&gt;</span>","value":"#<Atom@57e3677: 186740>"}
+;; <=
+
+;; @@
+(future-done? f)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>true</span>","value":"true"}
+;; <=
+
+;; @@
+(def f
+(->> "/Volumes/5TB/data/"
+     io/file
+     file-seq
+     (filter #(and (fs/file? %)
+                   (= ".xml" (fs/extension %))
+                   (re-matches #"\d+" (fs/base-name % true))))
+     (pmap (fn [v]
+             (swap! c inc)
+             (as-> v x
+                  (slurp x)
+                  (xml/parse-str-raw x :preserve-whitespace true)
+                  (xml/emit-str-raw x)
+                  (spit (str "/Volumes/4TB/raw/" (fs/base-name v true) ".xml") x))))
+     dorun
+     future))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/f</span>","value":"#'suub.bote.dict/f"}
+;; <=
+
+;; @@
+c
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-atom'>#&lt;Atom@57e3677: 121995&gt;</span>","value":"#<Atom@57e3677: 121995>"}
+;; <=
+
+;; @@
+(future-done? f)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>true</span>","value":"true"}
+;; <=
+
+;; @@
+
 ;; @@
