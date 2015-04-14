@@ -962,12 +962,16 @@
 (defn site-statistic [dict vlid]
   (page-statistic dict (le/abby-plaintext vlid)))
 
-#_(def grenzbote-vlids
+(def grenzbote-vlids
   (for [jg le/jg-docs
         vol (le/volume-docs jg)
         artcl (le/select-article vol)
         vlid (article-vlids artcl)]
     vlid))
+
+(defn save-vlids []
+  (spit "vlids-scraper.edn" (pr-str (into [] grenzbote-vlids))))
+
 
 (def grenzbote-vlids
   (clojure.set/difference
@@ -1104,6 +1108,18 @@
                                        (- (count (read-string (slurp ocr))) (count (read-string (slurp corr))))])
                                     ocr-files corr-files)]
     (sort-by second  list-vlid-error-deltas)))
+;; suub.bote.dict> (def sorted-correction-quality (sorted-error-number-deltas "/home/noelte/clojure/ocr-engine-results/abby-more-text/" "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"))
+;;suub.bote.dict> (count sorted-correction-quality)
+;;362
+;; suub.bote.dict> (spit "sorted-correction-quality.edn" (pr-str sorted-correction-quality))
+
+;; 9.4.2014
+;; suub.bote.dict> (def sorted-correction-quality-overproof (sorted-error-number-deltas "/home/noelte/clojure/ocr-engine-results/abby-more-text/" "/home/noelte/clojure/ocr-engine-results/australier"))
+;; suub.bote.dict> (count sorted-correction-quality-overproof)
+;; 200  <-- SELTSAM:
+;;          die 3 Verzeichnisse edit ground-truth und ocr-results
+;;          haben alle unterschiedlich viele Dateien!?!?!?
+;; suub.bote.dict> (spit "sorted-correction-quality-overproof.edn" (pr-str sorted-correction-quality-overproof))
 
 
 
@@ -1117,7 +1133,7 @@
      :prefixes (prefixes dict)
      :substs substs}))
 
-(comment to run
+(comment 1 : to run
  (def f (future (def res (binding [*out* (clojure.java.io/writer "status.txt")]
                   (evaluate-algorithm
                  (get-current-params)
@@ -1134,3 +1150,55 @@
             (nummer 1)
             (spit "progess"  "nummer 1 erledigt" :append true)
             (nummer 2)))))
+
+(comment 2 : to run 
+zum alles Evaluieren
+suub.bote.dict> (def f (future (do 
+                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                  (evaluate-algorithm
+                 (get-current-params)
+                 "/home/noelte/clojure/ocr-engine-results/abby-neu-neue-seiten-ohne-schrottseiten"
+                 "/home/noelte/clojure/ocr-engine-results/abby-neu-neu-seiten-ohne-schrottseiten-unser-algorithmus-7.4.2015"
+                 152)))
+                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                  (evaluate-algorithm
+                 (get-current-params)
+                 "/home/noelte/clojure/ocr-engine-results/1870-abby"
+                 "/home/noelte/clojure/ocr-engine-results/1870-abby-unser-algorithmus-7.4.2015"
+                 10)))
+                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                  (evaluate-algorithm
+                 (get-current-params)
+                 "/home/noelte/clojure/ocr-engine-results/1900-abby"
+                 "/home/noelte/clojure/ocr-engine-results/1900-abby-unser-algorithmus-7.4.2015"
+                 8)))
+                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                  (evaluate-algorithm
+                 (get-current-params)
+                 "/home/noelte/clojure/ocr-engine-results/abby-more-text-ohne-schrottseiten"
+                 "/home/noelte/clojure/ocr-engine-results/abby-more-text-ohne-schrottseiten-unser-algorithmus-7.4.2015"
+                 352))))))
+---------------------------------
+Mail:
+
+(def res (generate-single-entity-statistics "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus" (read-string (slurp "entities.edn"))))
+                      (spit "line-statistics-ocr-verbessert.edn" (pr-str res))
+
+ (def res (generate-single-entity-statistics
+ "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"
+ (read-string (slurp "entities.edn"))
+ 1))
+
+(spit "entity-statistics-ocr-verbessert-fehler-1.edn" (pr-str res))
+---------------------------------
+(def f (future (do 
+                      (def res (generate-single-entity-statistics
+                                "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"
+                                (read-string (slurp "entities.edn"))
+                                1))
+
+                      (spit "entity-statistics-ocr-verbessert-fehler-1.edn" (pr-str res)))))
+
+
+
+)
