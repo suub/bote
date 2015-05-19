@@ -8,10 +8,10 @@
 
 ;; @@
 (ns suub.bote.dict
-  (:require [gorilla-plot.core :as plot]
-            [gorilla-repl.table :as table]
+  (:require ;[gorilla-plot.core :as plot]
+            ;[gorilla-repl.table :as table]
            ; [error-codes.gorilla :as gv]
-            [gorilla-repl.html :as gh]
+          ;  [gorilla-repl.html :as gh]
             [clojure.core.reducers :as r]
             [clojure.core.async :as a]
             [clojure.test :as t]
@@ -24,7 +24,7 @@
             [me.raynes.fs :as fs]
             [suub.bote.abbyy :as abbyy]
             [gorilla-renderable.core :as render]
-            [marmoset.util :as marm]
+          ;  [marmoset.util :as marm]
             [error-codes.files :as ec]))
 ;; @@
 ;; =>
@@ -214,14 +214,14 @@
                                                       :simplified simpl)
                                                     (bigint cnt)}))
                      (r/fold (partial merge-with +)))
-          word-count (r/fold + (r/map second words))]
+          word-count (r/fold + (r/map (fn [a b] b) words))]
       (->> words
            (r/map (fn [[w c]] [w (/ c word-count)]))
            (into {})))))
 ;; @@
 
 ;; @@
-(def DTA-dictionary (read-DTA-dictionary "resources/dta-freq.d/dta-core-1850+.fuw"
+#_(def DTA-dictionary (read-DTA-dictionary "resources/dta-freq.d/dta-core-1850+.fuw"
                                          :simplified))
 ;; @@
 
@@ -246,8 +246,8 @@
 ;; @@
 
 ;; @@
-(def grenzbote-dictionary (edn/read-string (slurp "resources/gb-dict.edn")))
-(def grenzbote-bigrams    (edn/read-string (slurp "resources/gb-bigr.edn")))
+#_(def grenzbote-dictionary (edn/read-string (slurp "resources/gb-dict.edn")))
+#_(def grenzbote-bigrams    (edn/read-string (slurp "resources/gb-bigr.edn")))
 ;; @@
 
 ;; **
@@ -255,7 +255,7 @@
 ;; **
 
 ;; @@
-(def potsdam-dictionary (->> "resources/potsdam-dict.edn"
+#_(def potsdam-dictionary (->> "resources/potsdam-dict.edn"
                               slurp
                               edn/read-string
                               (map #(update-in % [1] bigint))
@@ -301,7 +301,7 @@
 ;; **
 
 ;; @@
-(def DTA-heuristic (heuristic-for-dictionary DTA-dictionary))
+#_(def DTA-heuristic (heuristic-for-dictionary DTA-dictionary))
 ;; @@
 
 ;; **
@@ -309,7 +309,7 @@
 ;; **
 
 ;; @@
-(def potsdam-heuristic (time (prefixes pots-dict)))
+#_(def potsdam-heuristic (time (prefixes pots-dict)))
 ;; @@
 
 ;; **
@@ -352,7 +352,7 @@
 ;; <=
 
 ;; @@
-(def f (future
+#_(def f (future
   (time (dorun
   (pmap #(do
            (spit (str "/Users/ticking/Desktop/test" (first %) ".xml")
@@ -401,11 +401,11 @@
 ;; <=
 
 ;; @@
-(map #(spit (str "/Users/ticking/Desktop/gt/" % ".xml") (slurp (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" %))) files)
+#_(map #(spit (str "/Users/ticking/Desktop/gt/" % ".xml") (slurp (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" %))) files)
 ;; @@
 
 ;; @@
-(binding [*out* (clojure.java.io/writer "output.txt")]
+#_(binding [*out* (clojure.java.io/writer "output.txt")]
   (evaluate-algorithm gerrit-substitutions
                       gerrit-heuristic
                       gerrit-dictionary
@@ -416,7 +416,7 @@
 ;; @@
 
 ;; @@
-(binding [*out* (clojure.java.io/writer "output.txt")]
+#_(binding [*out* (clojure.java.io/writer "output.txt")]
   (evaluate-algorithm gerrit-substitutions
                       gerrit-heuristic
                       gerrit-dictionary
@@ -427,7 +427,7 @@
 ;; @@
 
 ;; @@
-(->> "/Users/ticking/Desktop/ocr-engine-results/abby-more-text/ground-truth"
+#_(->> "/Users/ticking/Desktop/ocr-engine-results/abby-more-text/ground-truth"
      io/file
      file-seq
      (filter #(and (fs/file? %)
@@ -444,7 +444,7 @@
 ;; **
 
 ;; @@
-(def params (read-string (slurp "/Users/ticking/Desktop/ocr-engine-results/abby-cleaned-gerrit-1800/parameters")))
+(def params (read-string (slurp "/home/noelte/clojure/ocr-engine-results/abby-cleaned-gerrit-1800/parameters")))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/params</span>","value":"#'suub.bote.dict/params"}
@@ -500,8 +500,10 @@
 ;; <=
 
 ;; @@
+(comment
+
 (def f
-(->> "/Volumes/5TB/data/"
+(->> "/media/noelte/4TB/raw/"
      io/file
      file-seq
      (filter #(and (fs/file? %)
@@ -514,7 +516,7 @@
                   (xml/parse-str-raw x :preserve-whitespace true)
                   (correct-page gerrit-substitutions gerrit-heuristic gerrit-dictionary x)
                   (xml/emit-str-raw x)
-                  (spit (str "/Volumes/4TB/processed/" (fs/base-name v true) ".xml") x))))
+                  (spit (str "/home/noelte/clojure/processed/" (fs/base-name v true) ".xml") x))))
      dorun
      future))
 ;; @@
@@ -538,7 +540,7 @@ c
 
 ;; @@
 (def f
-(->> "/Volumes/5TB/data/"
+(->> "/media/noelte/4TB/raw/"
      io/file
      file-seq
      (filter #(and (fs/file? %)
@@ -553,6 +555,8 @@ c
                   (spit (str "/Volumes/4TB/raw/" (fs/base-name v true) ".xml") x))))
      dorun
      future))
+
+
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/f</span>","value":"#'suub.bote.dict/f"}
@@ -575,3 +579,4 @@ c
 ;; @@
 
 ;; @@
+)
