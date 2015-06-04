@@ -9,24 +9,24 @@
 ;; @@
 (ns suub.bote.dict
   (:require ;[gorilla-plot.core :as plot]
-            ;[gorilla-repl.table
-            [clojure.core.reducers :as r]
-            [suub.bote.util :as util]
-            [suub.bote.abbyy :as abbyy]
-            [clojure.test :as t]
-            [taoensso.timbre :as log]
-            [clojure.java.io :as io]
-            [me.raynes.laser :as l]
-            [suub.bote.clojure.xml :as xml]
-            [clojure.string :as string]
-            [clojure.data.priority-map :as pm]
-            [instaparse.core :as insta]
-            [instaparse.combinators :as instac]
-            [clojure.edn :as edn]
-            [me.raynes.fs :as fs]
-            [laser-experiments.core :as le]
-            [suub.bote.abbyy :as abbyy]
-            [error-codes.files :as ec]))
+                                        ;[gorilla-repl.table
+   [clojure.core.reducers :as r]
+   [suub.bote.util :as util]
+   [suub.bote.abbyy :as abbyy]
+   [clojure.test :as t]
+   [taoensso.timbre :as log]
+   [clojure.java.io :as io]
+   [me.raynes.laser :as l]
+   [suub.bote.clojure.xml :as xml]
+   [clojure.string :as string]
+   [clojure.data.priority-map :as pm]
+   [instaparse.core :as insta]
+   [instaparse.combinators :as instac]
+   [clojure.edn :as edn]
+   [me.raynes.fs :as fs]
+   [laser-experiments.core :as le]
+   [suub.bote.abbyy :as abbyy]
+   [error-codes.files :as ec]))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
@@ -37,9 +37,10 @@
   (with-open [in (io/reader path)]
     (let [words (->> (line-seq in)
                      (r/map #(string/split % #"\s+"))
-                     (r/remove empty?)
+                     (r/remove #(<= (count %) 3))
                      ;;use simplified form orig is not good
                      (r/map (fn [[cnt orig simpl]]
+                              
                               [simpl (bigint cnt)])))
           word-count (r/fold + (r/map second words))]
       (->> words
@@ -60,7 +61,7 @@
 ;; @@
 (defn drop-prefix
   "Returns the rest of the seq after the prefix elements have been removed.
-   When no match can be found returns nil."
+  When no match can be found returns nil."
   [prefix coll]
   (loop [pre (seq prefix),
          post (seq coll)]
@@ -80,7 +81,7 @@
 (defn word-prefixes [[w p]]
   (into {}
         (r/map (fn [n] [(subs w 0 n) p])
-          (range 0 (inc (count w))))))
+               (range 0 (inc (count w))))))
 
 (defn merge-prefixes [& m]
   (apply merge-with max m))
@@ -97,14 +98,14 @@
 ;; @@
 (defn transform
   "Expects:
-    * matching function that takes a collection of elements that
-      are expected next by the transformations and the remainder of the query.
-      In case of a match it must return a tuple of the match and the rest,
-      otherwise nil.
-    * The transformations to be performed.
-    * A query to be matched.
-    Retuns the possible corrections, their probability of a match
-    and a collection of their substitutions."
+  * matching function that takes a collection of elements that
+  are expected next by the transformations and the remainder of the query.
+  In case of a match it must return a tuple of the match and the rest,
+  otherwise nil.
+  * The transformations to be performed.
+  * A query to be matched.
+  Retuns the possible corrections, their probability of a match
+  and a collection of their substitutions."
   [{:keys [matcher dict prefixes substs]} query]
   (letfn [(iterations [run]
             (for [[[ocr truth] prob] substs
@@ -129,17 +130,17 @@
                      (recur (into (pop unfinished)
                                   (for [{:keys [rest word subst-prob]
                                          :as iteration} (iterations candidate)
-                                        :let [prefix-prob (prefixes word)
-                                              dict-prob (dict word)
-                                              word-prob (if (empty? rest)
-                                                          dict-prob
-                                                          prefix-prob)]
-                                        :when word-prob
-                                        :let [prob (* word-prob subst-prob)]]
-                                        [(assoc iteration
-                                           :word-prob word-prob
-                                           :prob prob)
-                                         (- prob)])))))))))]
+                                         :let [prefix-prob (prefixes word)
+                                               dict-prob (dict word)
+                                               word-prob (if (empty? rest)
+                                                           dict-prob
+                                                           prefix-prob)]
+                                         :when word-prob
+                                         :let [prob (* word-prob subst-prob)]]
+                                    [(assoc iteration
+                                            :word-prob word-prob
+                                            :prob prob)
+                                     (- prob)])))))))))]
     (->> (worker (pm/priority-map
                   {:rest query
                    :word ""
@@ -169,17 +170,17 @@
 
 ;; @@
 #_(def dta-dict (dissoc dta-dict
-                "angezogeuen"
-                "uach"
-                "naeh"
-                "fie"
-                "fic"
-                "zn"
-                "Dic"
-                "gebranch"
-                "uud"
-                "Irrcreden"
-                "Tanfe"))
+                        "angezogeuen"
+                        "uach"
+                        "naeh"
+                        "fie"
+                        "fic"
+                        "zn"
+                        "Dic"
+                        "gebranch"
+                        "uud"
+                        "Irrcreden"
+                        "Tanfe"))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/dta-dict</span>","value":"#'suub.bote.dict/dta-dict"}
@@ -190,9 +191,9 @@
 #_(def gold-subst (read-string (slurp "resources/new-subsstitution.edn")))
 
 #_(defn create-gold-subst [gold-subst]
-  (into {} (for [[a v] gold-subst
-                 [b v] v]
-             [[a b] v])))
+    (into {} (for [[a v] gold-subst
+                   [b v] v]
+               [[a b] v])))
 
 #_(def gold-subst (create-gold-subst gold-subst))
 ;; @@
@@ -202,10 +203,10 @@
 
 ;; @@
 #_(def pots-dict (->> "resources/dict.edn"
-                    slurp
-                    edn/read-string
-                    (map #(update-in % [1] bigint))
-                    (into {})))
+                      slurp
+                      edn/read-string
+                      (map #(update-in % [1] bigint))
+                      (into {})))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/simple-subst</span>","value":"#'suub.bote.dict/simple-subst"}
@@ -213,397 +214,397 @@
 
 ;; @@
 #_(def simple-subst
-        {["u" "n"] 1/2
-         ["n" "u"] 1/2
-         ["c" "e"] 1/4
-         ["e" "c"] 1/4
-         ["N" "U"] 1/8
-         ["N" "R"] 1/8
-         ["rn" "m"] 1/8
-         ["iii" "m"] 1/8
-         ["in" "m"] 1/8
-         ["m" "in"] 1/8
-         ["n" "m"] 1/8
-         ["m" "n"] 1/8
-         ["m" "en"] 1/8
-         ["f" "s"] 1/4
-         ["s" "f"] 1/4
-         ["v" "o"] 1/4
-         ["ö" "v"] 1/8
-         ["v" "ö"] 1/8
-         ["o" "v"] 1/4
-         ["n" "r"] 1/4
-         ["d" "b"] 1/8
-         ["b" "d"] 1/8
-         ["ü" "n"] 1/8
-         ["n" "ü"] 1/8
-         ["zu" "m"] 1/50
-         ["n" "il"] 1/50
-         ["m" "n?"] 1/50
-         ["en" "m"] 1/50
-         ["s" "h"] 1/50
-         ["b" "h"] 1/8
-         ["h" "b"] 1/8
-         ["t" "d"] 1/50
-         ["d" "t"] 1/50
-         ["im" "un"] 1/50
-         ["s" "S"] 1/50
-         ["S" "s"] 1/50
-         ["t" "e"] 1/50
-         ["y" "p"] 1/8
-         ["p" "y"] 1/8
-         ["l" "i"] 1/8
-         ["i" "l"] 1/8
-         ["ö" "s"] 1/8
-         ["s" "ö"] 1/8
-         ["k" "l"] 1/8
-         ["l" "k"] 1/8
-         ["l" "t"] 1/8
-         ["t" "l"] 1/8
-         ["h" "s"] 1/8
-         ["A" "U"] 1/50
-         ["U" "A"] 1/50
-         ["m," "n"] 1/50
-         ["m:" "n"] 1/50
-         ["li" "u"] 1/50
-         ["it" "n"] 1/50
-         ["k" "t"] 1/50
-         ["t" "k"] 1/50
-         ["ö" "o"] 1/50
-         ["o" "ö"] 1/50
-         ["ä" "a"] 1/50
-         ["a" "ä"] 1/50
-         ["ü" "u"] 1/50
-         ["u" "ü"] 1/50
-         ["Ö" "O"] 1/50
-         ["O" "Ö"] 1/50
-         ["Ä" "A"] 1/50
-         ["A" "Ä"] 1/50
-         ["Ü" "U"] 1/50
-         ["U" "Ü"] 1/50
-         ["n" "lt"] 1/50
-         ["I" "J"] 1
-         ["J" "I"] 1
-         ["a" "a"] 1
-         ["b" "b"] 1
-         ["c" "c"] 1
-         ["d" "d"] 1
-         ["e" "e"] 1
-         ["f" "f"] 1
-         ["g" "g"] 1
-         ["h" "h"] 1
-         ["i" "i"] 1
-         ["j" "j"] 1
-         ["k" "k"] 1
-         ["l" "l"] 1
-         ["m" "m"] 1
-         ["n" "n"] 1
-         ["o" "o"] 1
-         ["p" "p"] 1
-         ["q" "q"] 1
-         ["r" "r"] 1
-         ["s" "s"] 1
-         ["t" "t"] 1
-         ["u" "u"] 1
-         ["v" "v"] 1
-         ["w" "w"] 1
-         ["x" "x"] 1
-         ["y" "y"] 1
-         ["z" "z"] 1
-         ["A" "A"] 1
-         ["B" "B"] 1
-         ["C" "C"] 1
-         ["D" "D"] 1
-         ["E" "E"] 1
-         ["F" "F"] 1
-         ["G" "G"] 1
-         ["H" "H"] 1
-         ["I" "I"] 1
-         ["J" "J"] 1
-         ["K" "K"] 1
-         ["L" "L"] 1
-         ["M" "M"] 1
-         ["N" "N"] 1
-         ["O" "O"] 1
-         ["P" "P"] 1
-         ["Q" "Q"] 1
-         ["R" "R"] 1
-         ["S" "S"] 1
-         ["T" "T"] 1
-         ["U" "U"] 1
-         ["V" "V"] 1
-         ["W" "W"] 1
-         ["X" "X"] 1
-         ["Y" "Y"] 1
-         ["Z" "Z"] 1
-         ["0" "0"] 1
-         ["1" "1"] 1
-         ["2" "2"] 1
-         ["3" "3"] 1
-         ["4" "4"] 1
-         ["5" "5"] 1
-         ["6" "6"] 1
-         ["7" "7"] 1
-         ["8" "8"] 1
-         ["9" "9"] 1
-         ["ä" "ä"] 1
-         ["ö" "ö"] 1
-         ["ü" "ü"] 1
-         ["ß" "ß"] 1
-         ["Ä" "Ä"] 1
-         ["Ö" "Ö"] 1
-         ["Ü" "Ü"] 1
-         ["-" "-"] 1
-         ["," ","] 1
-         ["'" "'"] 1
-         ["¬" "¬"] 1})
+    {["u" "n"] 1/2
+     ["n" "u"] 1/2
+     ["c" "e"] 1/4
+     ["e" "c"] 1/4
+     ["N" "U"] 1/8
+     ["N" "R"] 1/8
+     ["rn" "m"] 1/8
+     ["iii" "m"] 1/8
+     ["in" "m"] 1/8
+     ["m" "in"] 1/8
+     ["n" "m"] 1/8
+     ["m" "n"] 1/8
+     ["m" "en"] 1/8
+     ["f" "s"] 1/4
+     ["s" "f"] 1/4
+     ["v" "o"] 1/4
+     ["ö" "v"] 1/8
+     ["v" "ö"] 1/8
+     ["o" "v"] 1/4
+     ["n" "r"] 1/4
+     ["d" "b"] 1/8
+     ["b" "d"] 1/8
+     ["ü" "n"] 1/8
+     ["n" "ü"] 1/8
+     ["zu" "m"] 1/50
+     ["n" "il"] 1/50
+     ["m" "n?"] 1/50
+     ["en" "m"] 1/50
+     ["s" "h"] 1/50
+     ["b" "h"] 1/8
+     ["h" "b"] 1/8
+     ["t" "d"] 1/50
+     ["d" "t"] 1/50
+     ["im" "un"] 1/50
+     ["s" "S"] 1/50
+     ["S" "s"] 1/50
+     ["t" "e"] 1/50
+     ["y" "p"] 1/8
+     ["p" "y"] 1/8
+     ["l" "i"] 1/8
+     ["i" "l"] 1/8
+     ["ö" "s"] 1/8
+     ["s" "ö"] 1/8
+     ["k" "l"] 1/8
+     ["l" "k"] 1/8
+     ["l" "t"] 1/8
+     ["t" "l"] 1/8
+     ["h" "s"] 1/8
+     ["A" "U"] 1/50
+     ["U" "A"] 1/50
+     ["m," "n"] 1/50
+     ["m:" "n"] 1/50
+     ["li" "u"] 1/50
+     ["it" "n"] 1/50
+     ["k" "t"] 1/50
+     ["t" "k"] 1/50
+     ["ö" "o"] 1/50
+     ["o" "ö"] 1/50
+     ["ä" "a"] 1/50
+     ["a" "ä"] 1/50
+     ["ü" "u"] 1/50
+     ["u" "ü"] 1/50
+     ["Ö" "O"] 1/50
+     ["O" "Ö"] 1/50
+     ["Ä" "A"] 1/50
+     ["A" "Ä"] 1/50
+     ["Ü" "U"] 1/50
+     ["U" "Ü"] 1/50
+     ["n" "lt"] 1/50
+     ["I" "J"] 1
+     ["J" "I"] 1
+     ["a" "a"] 1
+     ["b" "b"] 1
+     ["c" "c"] 1
+     ["d" "d"] 1
+     ["e" "e"] 1
+     ["f" "f"] 1
+     ["g" "g"] 1
+     ["h" "h"] 1
+     ["i" "i"] 1
+     ["j" "j"] 1
+     ["k" "k"] 1
+     ["l" "l"] 1
+     ["m" "m"] 1
+     ["n" "n"] 1
+     ["o" "o"] 1
+     ["p" "p"] 1
+     ["q" "q"] 1
+     ["r" "r"] 1
+     ["s" "s"] 1
+     ["t" "t"] 1
+     ["u" "u"] 1
+     ["v" "v"] 1
+     ["w" "w"] 1
+     ["x" "x"] 1
+     ["y" "y"] 1
+     ["z" "z"] 1
+     ["A" "A"] 1
+     ["B" "B"] 1
+     ["C" "C"] 1
+     ["D" "D"] 1
+     ["E" "E"] 1
+     ["F" "F"] 1
+     ["G" "G"] 1
+     ["H" "H"] 1
+     ["I" "I"] 1
+     ["J" "J"] 1
+     ["K" "K"] 1
+     ["L" "L"] 1
+     ["M" "M"] 1
+     ["N" "N"] 1
+     ["O" "O"] 1
+     ["P" "P"] 1
+     ["Q" "Q"] 1
+     ["R" "R"] 1
+     ["S" "S"] 1
+     ["T" "T"] 1
+     ["U" "U"] 1
+     ["V" "V"] 1
+     ["W" "W"] 1
+     ["X" "X"] 1
+     ["Y" "Y"] 1
+     ["Z" "Z"] 1
+     ["0" "0"] 1
+     ["1" "1"] 1
+     ["2" "2"] 1
+     ["3" "3"] 1
+     ["4" "4"] 1
+     ["5" "5"] 1
+     ["6" "6"] 1
+     ["7" "7"] 1
+     ["8" "8"] 1
+     ["9" "9"] 1
+     ["ä" "ä"] 1
+     ["ö" "ö"] 1
+     ["ü" "ü"] 1
+     ["ß" "ß"] 1
+     ["Ä" "Ä"] 1
+     ["Ö" "Ö"] 1
+     ["Ü" "Ü"] 1
+     ["-" "-"] 1
+     ["," ","] 1
+     ["'" "'"] 1
+     ["¬" "¬"] 1})
 
 (def simple-subst
-        {["u" "n"] 1/2
-         ["n" "u"] 1/2
-         ["c" "e"] 1/4
-         ["e" "c"] 1/4
-         ["N" "U"] 1/8
-         ["N" "R"] 1/8
-         ["rn" "m"] 1/8
-         ["iii" "m"] 1/8
-         ["in" "m"] 1/8
-         ["m" "in"] 1/8
-         ["n" "m"] 1/8
-         ["m" "n"] 1/8
-         ["m" "en"] 1/8
-         ["f" "s"] 1/4
-         ["s" "f"] 1/4
-         ["v" "o"] 1/4
-         ["o" "v"] 1/4
-         ["n" "r"] 1/4
-         ["a" "a"] 1
-         ["b" "b"] 1
-         ["c" "c"] 1
-         ["d" "d"] 1
-         ["e" "e"] 1
-         ["f" "f"] 1
-         ["g" "g"] 1
-         ["h" "h"] 1
-         ["i" "i"] 1
-         ["j" "j"] 1
-         ["k" "k"] 1
-         ["l" "l"] 1
-         ["m" "m"] 1
-         ["n" "n"] 1
-         ["o" "o"] 1
-         ["p" "p"] 1
-         ["q" "q"] 1
-         ["r" "r"] 1
-         ["s" "s"] 1
-         ["t" "t"] 1
-         ["u" "u"] 1
-         ["v" "v"] 1
-         ["w" "w"] 1
-         ["x" "x"] 1
-         ["y" "y"] 1
-         ["z" "z"] 1
-         ["A" "A"] 1
-         ["B" "B"] 1
-         ["C" "C"] 1
-         ["D" "D"] 1
-         ["E" "E"] 1
-         ["F" "F"] 1
-         ["G" "G"] 1
-         ["H" "H"] 1
-         ["I" "I"] 1
-         ["J" "J"] 1
-         ["K" "K"] 1
-         ["L" "L"] 1
-         ["M" "M"] 1
-         ["N" "N"] 1
-         ["O" "O"] 1
-         ["P" "P"] 1
-         ["Q" "Q"] 1
-         ["R" "R"] 1
-         ["S" "S"] 1
-         ["T" "T"] 1
-         ["U" "U"] 1
-         ["V" "V"] 1
-         ["W" "W"] 1
-         ["X" "X"] 1
-         ["Y" "Y"] 1
-         ["Z" "Z"] 1
-         ["0" "0"] 1
-         ["1" "1"] 1
-         ["2" "2"] 1
-         ["3" "3"] 1
-         ["4" "4"] 1
-         ["5" "5"] 1
-         ["6" "6"] 1
-         ["7" "7"] 1
-         ["8" "8"] 1
-         ["9" "9"] 1
-         ["ä" "ä"] 1
-         ["ö" "ö"] 1
-         ["ü" "ü"] 1
-         ["ß" "ß"] 1
-         ["Ä" "Ä"] 1
-         ["Ö" "Ö"] 1
-         ["Ü" "Ü"] 1
-         ["-" "-"] 1
-         ["," ","] 1
-         ["'" "'"] 1
-         ["¬" "¬"] 1})
+  {["u" "n"] 1/2
+   ["n" "u"] 1/2
+   ["c" "e"] 1/4
+   ["e" "c"] 1/4
+   ["N" "U"] 1/8
+   ["N" "R"] 1/8
+   ["rn" "m"] 1/8
+   ["iii" "m"] 1/8
+   ["in" "m"] 1/8
+   ["m" "in"] 1/8
+   ["n" "m"] 1/8
+   ["m" "n"] 1/8
+   ["m" "en"] 1/8
+   ["f" "s"] 1/4
+   ["s" "f"] 1/4
+   ["v" "o"] 1/4
+   ["o" "v"] 1/4
+   ["n" "r"] 1/4
+   ["a" "a"] 1
+   ["b" "b"] 1
+   ["c" "c"] 1
+   ["d" "d"] 1
+   ["e" "e"] 1
+   ["f" "f"] 1
+   ["g" "g"] 1
+   ["h" "h"] 1
+   ["i" "i"] 1
+   ["j" "j"] 1
+   ["k" "k"] 1
+   ["l" "l"] 1
+   ["m" "m"] 1
+   ["n" "n"] 1
+   ["o" "o"] 1
+   ["p" "p"] 1
+   ["q" "q"] 1
+   ["r" "r"] 1
+   ["s" "s"] 1
+   ["t" "t"] 1
+   ["u" "u"] 1
+   ["v" "v"] 1
+   ["w" "w"] 1
+   ["x" "x"] 1
+   ["y" "y"] 1
+   ["z" "z"] 1
+   ["A" "A"] 1
+   ["B" "B"] 1
+   ["C" "C"] 1
+   ["D" "D"] 1
+   ["E" "E"] 1
+   ["F" "F"] 1
+   ["G" "G"] 1
+   ["H" "H"] 1
+   ["I" "I"] 1
+   ["J" "J"] 1
+   ["K" "K"] 1
+   ["L" "L"] 1
+   ["M" "M"] 1
+   ["N" "N"] 1
+   ["O" "O"] 1
+   ["P" "P"] 1
+   ["Q" "Q"] 1
+   ["R" "R"] 1
+   ["S" "S"] 1
+   ["T" "T"] 1
+   ["U" "U"] 1
+   ["V" "V"] 1
+   ["W" "W"] 1
+   ["X" "X"] 1
+   ["Y" "Y"] 1
+   ["Z" "Z"] 1
+   ["0" "0"] 1
+   ["1" "1"] 1
+   ["2" "2"] 1
+   ["3" "3"] 1
+   ["4" "4"] 1
+   ["5" "5"] 1
+   ["6" "6"] 1
+   ["7" "7"] 1
+   ["8" "8"] 1
+   ["9" "9"] 1
+   ["ä" "ä"] 1
+   ["ö" "ö"] 1
+   ["ü" "ü"] 1
+   ["ß" "ß"] 1
+   ["Ä" "Ä"] 1
+   ["Ö" "Ö"] 1
+   ["Ü" "Ü"] 1
+   ["-" "-"] 1
+   ["," ","] 1
+   ["'" "'"] 1
+   ["¬" "¬"] 1})
 
 
 (def simple-subst
-        {["u" "n"] 1/2
-         ["n" "u"] 1/2
-         ["c" "e"] 1/4
-         ["e" "c"] 1/4
-         ["N" "U"] 1/8
-         ["N" "R"] 1/8
-         ["rn" "m"] 1/8
-         ["iii" "m"] 1/8
-         ["in" "m"] 1/8
-         ["m" "in"] 1/8
-         ["n" "m"] 1/8
-         ["m" "n"] 1/8
-         ["m" "en"] 1/8
-         ["f" "s"] 1/4
-         ["s" "f"] 1/4
-         ["v" "o"] 1/4
-         ["ö" "v"] 1/8
-         ["v" "ö"] 1/8
-         ["o" "v"] 1/4
-         ["n" "r"] 1/4
-         ["d" "b"] 1/8
-         ["b" "d"] 1/8
-         ["ü" "n"] 1/8
-         ["n" "ü"] 1/8
-         ["zu" "m"] 1/16
-         ["n" "il"] 1/16
-         ["m" "n?"] 1/16
-         ["en" "m"] 1/16
-         ["s" "h"] 1/16
-         ["b" "h"] 1/8
-         ["h" "b"] 1/8
-         ["t" "d"] 1/16
-         ["d" "t"] 1/16
-         ["im" "un"] 1/16
-         ["s" "S"] 1/16
-         ["S" "s"] 1/16
-         ["t" "e"] 1/16
-         ["y" "p"] 1/8
-         ["p" "y"] 1/8
-         ["l" "i"] 1/8
-         ["i" "l"] 1/8
-         ["ö" "s"] 1/8
-         ["s" "ö"] 1/8
-         ["k" "l"] 1/8
-         ["l" "k"] 1/8
-         ["l" "t"] 1/8
-         ["t" "l"] 1/8
-         ["h" "s"] 1/8
-         ["A" "U"] 1/16
-         ["U" "A"] 1/16
-         ["m," "n"] 1/16
-         ["m:" "n"] 1/16
-         ["li" "u"] 1/16
-         ["it" "n"] 1/16
-         ["k" "t"] 1/16
-         ["t" "k"] 1/16
-         ["ö" "o"] 1/16
-         ["o" "ö"] 1/16
-         ["ä" "a"] 1/16
-         ["a" "ä"] 1/16
-         ["ü" "u"] 1/16
-         ["u" "ü"] 1/16
-         ["Ö" "O"] 1/16
-         ["O" "Ö"] 1/16
-         ["Ä" "A"] 1/16
-         ["A" "Ä"] 1/16
-         ["Ü" "U"] 1/16
-         ["U" "Ü"] 1/16
-         ["n" "lt"] 1/16
-         ["I" "J"] 1
-         ["J" "I"] 1
-         ["a" "a"] 1
-         ["b" "b"] 1
-         ["c" "c"] 1
-         ["d" "d"] 1
-         ["e" "e"] 1
-         ["f" "f"] 1
-         ["g" "g"] 1
-         ["h" "h"] 1
-         ["i" "i"] 1
-         ["j" "j"] 1
-         ["k" "k"] 1
-         ["l" "l"] 1
-         ["m" "m"] 1
-         ["n" "n"] 1
-         ["o" "o"] 1
-         ["p" "p"] 1
-         ["q" "q"] 1
-         ["r" "r"] 1
-         ["s" "s"] 1
-         ["t" "t"] 1
-         ["u" "u"] 1
-         ["v" "v"] 1
-         ["w" "w"] 1
-         ["x" "x"] 1
-         ["y" "y"] 1
-         ["z" "z"] 1
-         ["A" "A"] 1
-         ["B" "B"] 1
-         ["C" "C"] 1
-         ["D" "D"] 1
-         ["E" "E"] 1
-         ["F" "F"] 1
-         ["G" "G"] 1
-         ["H" "H"] 1
-         ["I" "I"] 1
-         ["J" "J"] 1
-         ["K" "K"] 1
-         ["L" "L"] 1
-         ["M" "M"] 1
-         ["N" "N"] 1
-         ["O" "O"] 1
-         ["P" "P"] 1
-         ["Q" "Q"] 1
-         ["R" "R"] 1
-         ["S" "S"] 1
-         ["T" "T"] 1
-         ["U" "U"] 1
-         ["V" "V"] 1
-         ["W" "W"] 1
-         ["X" "X"] 1
-         ["Y" "Y"] 1
-         ["Z" "Z"] 1
-         ["0" "0"] 1
-         ["1" "1"] 1
-         ["2" "2"] 1
-         ["3" "3"] 1
-         ["4" "4"] 1
-         ["5" "5"] 1
-         ["6" "6"] 1
-         ["7" "7"] 1
-         ["8" "8"] 1
-         ["9" "9"] 1
-         ["ä" "ä"] 1
-         ["ö" "ö"] 1
-         ["ü" "ü"] 1
-         ["ß" "ß"] 1
-         ["Ä" "Ä"] 1
-         ["Ö" "Ö"] 1
-         ["Ü" "Ü"] 1
-         ["-" "-"] 1
-         ["," ","] 1
-         ["'" "'"] 1
-         ["¬" "¬"] 1})
+  {["u" "n"] 1/2
+   ["n" "u"] 1/2
+   ["c" "e"] 1/4
+   ["e" "c"] 1/4
+   ["N" "U"] 1/8
+   ["N" "R"] 1/8
+   ["rn" "m"] 1/8
+   ["iii" "m"] 1/8
+   ["in" "m"] 1/8
+   ["m" "in"] 1/8
+   ["n" "m"] 1/8
+   ["m" "n"] 1/8
+   ["m" "en"] 1/8
+   ["f" "s"] 1/4
+   ["s" "f"] 1/4
+   ["v" "o"] 1/4
+   ["ö" "v"] 1/8
+   ["v" "ö"] 1/8
+   ["o" "v"] 1/4
+   ["n" "r"] 1/4
+   ["d" "b"] 1/8
+   ["b" "d"] 1/8
+   ["ü" "n"] 1/8
+   ["n" "ü"] 1/8
+   ["zu" "m"] 1/16
+   ["n" "il"] 1/16
+   ["m" "n?"] 1/16
+   ["en" "m"] 1/16
+   ["s" "h"] 1/16
+   ["b" "h"] 1/8
+   ["h" "b"] 1/8
+   ["t" "d"] 1/16
+   ["d" "t"] 1/16
+   ["im" "un"] 1/16
+   ["s" "S"] 1/16
+   ["S" "s"] 1/16
+   ["t" "e"] 1/16
+   ["y" "p"] 1/8
+   ["p" "y"] 1/8
+   ["l" "i"] 1/8
+   ["i" "l"] 1/8
+   ["ö" "s"] 1/8
+   ["s" "ö"] 1/8
+   ["k" "l"] 1/8
+   ["l" "k"] 1/8
+   ["l" "t"] 1/8
+   ["t" "l"] 1/8
+   ["h" "s"] 1/8
+   ["A" "U"] 1/16
+   ["U" "A"] 1/16
+   ["m," "n"] 1/16
+   ["m:" "n"] 1/16
+   ["li" "u"] 1/16
+   ["it" "n"] 1/16
+   ["k" "t"] 1/16
+   ["t" "k"] 1/16
+   ["ö" "o"] 1/16
+   ["o" "ö"] 1/16
+   ["ä" "a"] 1/16
+   ["a" "ä"] 1/16
+   ["ü" "u"] 1/16
+   ["u" "ü"] 1/16
+   ["Ö" "O"] 1/16
+   ["O" "Ö"] 1/16
+   ["Ä" "A"] 1/16
+   ["A" "Ä"] 1/16
+   ["Ü" "U"] 1/16
+   ["U" "Ü"] 1/16
+   ["n" "lt"] 1/16
+   ["I" "J"] 1
+   ["J" "I"] 1
+   ["a" "a"] 1
+   ["b" "b"] 1
+   ["c" "c"] 1
+   ["d" "d"] 1
+   ["e" "e"] 1
+   ["f" "f"] 1
+   ["g" "g"] 1
+   ["h" "h"] 1
+   ["i" "i"] 1
+   ["j" "j"] 1
+   ["k" "k"] 1
+   ["l" "l"] 1
+   ["m" "m"] 1
+   ["n" "n"] 1
+   ["o" "o"] 1
+   ["p" "p"] 1
+   ["q" "q"] 1
+   ["r" "r"] 1
+   ["s" "s"] 1
+   ["t" "t"] 1
+   ["u" "u"] 1
+   ["v" "v"] 1
+   ["w" "w"] 1
+   ["x" "x"] 1
+   ["y" "y"] 1
+   ["z" "z"] 1
+   ["A" "A"] 1
+   ["B" "B"] 1
+   ["C" "C"] 1
+   ["D" "D"] 1
+   ["E" "E"] 1
+   ["F" "F"] 1
+   ["G" "G"] 1
+   ["H" "H"] 1
+   ["I" "I"] 1
+   ["J" "J"] 1
+   ["K" "K"] 1
+   ["L" "L"] 1
+   ["M" "M"] 1
+   ["N" "N"] 1
+   ["O" "O"] 1
+   ["P" "P"] 1
+   ["Q" "Q"] 1
+   ["R" "R"] 1
+   ["S" "S"] 1
+   ["T" "T"] 1
+   ["U" "U"] 1
+   ["V" "V"] 1
+   ["W" "W"] 1
+   ["X" "X"] 1
+   ["Y" "Y"] 1
+   ["Z" "Z"] 1
+   ["0" "0"] 1
+   ["1" "1"] 1
+   ["2" "2"] 1
+   ["3" "3"] 1
+   ["4" "4"] 1
+   ["5" "5"] 1
+   ["6" "6"] 1
+   ["7" "7"] 1
+   ["8" "8"] 1
+   ["9" "9"] 1
+   ["ä" "ä"] 1
+   ["ö" "ö"] 1
+   ["ü" "ü"] 1
+   ["ß" "ß"] 1
+   ["Ä" "Ä"] 1
+   ["Ö" "Ö"] 1
+   ["Ü" "Ü"] 1
+   ["-" "-"] 1
+   ["," ","] 1
+   ["'" "'"] 1
+   ["¬" "¬"] 1})
 
 (def subst
   (assoc simple-subst
-    ["f" "s"] 1/4
-    ["s" "f"] 1/4
-    ["f" "f"] 3/4
-    ["ii" "u"] 1/4))
+         ["f" "s"] 1/4
+         ["s" "f"] 1/4
+         ["f" "f"] 3/4
+         ["ii" "u"] 1/4))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/simple-subst</span>","value":"#'suub.bote.dict/simple-subst"}
@@ -625,13 +626,13 @@
 ;; @@
 
 (def dta2 {:matcher simple-matcher
-         ;;  :dict dta-dict
-        ;;   :prefixes dta-prfx
-            :substs simple-subst})
-#_(def pots {:matcher simple-matcher
-           :dict pots-dict
-           :prefixes pots-prfx
+           ;;  :dict dta-dict
+           ;;   :prefixes dta-prfx
            :substs simple-subst})
+#_(def pots {:matcher simple-matcher
+             :dict pots-dict
+             :prefixes pots-prfx
+             :substs simple-subst})
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/pots</span>","value":"#'suub.bote.dict/pots"}
@@ -651,13 +652,13 @@
 
 (defn correct [p idx]
   (abbyy/change
-    (->> p
-      abbyy/lines
-      abbyy/remove-linewrap
-      (map #(first (transform idx %)))
-      (remove nil?)
-      (mapcat :substs))
-    p))
+   (->> p
+        abbyy/lines
+        abbyy/remove-linewrap
+        (map #(first (transform idx %)))
+        (remove nil?)
+        (mapcat :substs))
+   p))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;suub.bote.dict/correct-word</span>","value":"#'suub.bote.dict/correct-word"}
@@ -686,7 +687,7 @@
 
 (defn download-xml [vlid]
   (xml/parse
-    (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" vlid)))
+   (str "http://brema.suub.uni-bremen.de/grenzboten/download/fulltext/fr/" vlid)))
 
 ;; @@
 #_(def files (rest (file-seq (io/file "/Users/ticking/Desktop/ocr-engine-results/abby_verbessert/unverbessert"))))
@@ -697,14 +698,14 @@
 
 ;; @@
 #_(def f
-(time
-(doall
- (pmap (fn [f]
-         (->> f
-              slurp
-     		  (correct-page dta)
-       		  (spit (io/file "/Users/ticking/Desktop/ocr-engine-results/abbyydict2simplesubst/ocr-results" (.getName f)))))
-       files))))
+    (time
+     (doall
+      (pmap (fn [f]
+              (->> f
+                   slurp
+                   (correct-page dta)
+                   (spit (io/file "/Users/ticking/Desktop/ocr-engine-results/abbyydict2simplesubst/ocr-results" (.getName f)))))
+            files))))
 ;; @@
 ;; ->
 ;;; &quot;Elapsed time: 30953.074 msecs&quot;
@@ -730,14 +731,14 @@
   (.mkdir (io/file corrected-base-directory  "edits"))
   (.mkdir (io/file corrected-base-directory "ocr-results"))
   (let [ocr-text (->> (ec/get-files-sorted 
-                        (io/file ocr-base-directory "ocr-results"))
+                       (io/file ocr-base-directory "ocr-results"))
                       (take num-pages))]
     (println "starte Nachkorrektur")
     (doall 
-      (pmap #(->> % slurp (correct-page dta)
-                  (spit (io/file corrected-base-directory "ocr-results" (.getName %))))
-            ocr-text))
-    	
+     (pmap #(->> % slurp (correct-page dta)
+                 (spit (io/file corrected-base-directory "ocr-results" (.getName %))))
+           ocr-text))
+    
     (println "starte Auszählung")
     (ec/deploy-error-codes corrected-base-directory)
     (println "starte Auswärtung")
@@ -758,11 +759,11 @@
 
 ;; @@
 #_(binding [*out* (clojure.java.io/writer "/home/kima/dummyoutput.txt")]
-  (evaluate-algorithm 
-   dta
-   "/home/kima/programming/grenzbote-files/grenzbote/abby" 
-   "/home/kima/programming/grenzbote-files/grenzbote/abby-corr-normal-10-pages"
-   10))
+    (evaluate-algorithm 
+     dta
+     "/home/kima/programming/grenzbote-files/grenzbote/abby" 
+     "/home/kima/programming/grenzbote-files/grenzbote/abby-corr-normal-10-pages"
+     10))
 
 
 
@@ -805,8 +806,8 @@
   (defonce cleaned-prfx (prefixes cleaned-dict))
 
   (def dta-cleaned (assoc dta2
-                     :dict cleaned-dict
-                     :prefixes cleaned-prfx)))
+                          :dict cleaned-dict
+                          :prefixes cleaned-prfx)))
 
 
 (defn clear-all-consonants [dict]
@@ -829,26 +830,26 @@
 
 (def new-simple-subst
   (merge 
-    {["t" "e"] 1/50
-     ["k" "t"] 1/50
-     ["m" "a"] 1/50
-     ["c" "n"] 1/50
-     ["h" "d"] 1/50
-     ["N" "n"] 1/50
-     ["m" "zu"] 1/100
-     ["n" "m"] 1/50
-     ["m" "u"] 1/50
-     ["il" "n"] 1/100
-     ["n?" "m"] 1/100
-     ["v" "p"] 1/50
-     ["w" "o"] 1/50
-     ["n:" "m"] 1/100
-     ["c" "a"] 1/50
-     ["m" "en"] 1/100
-     ["n" "ü"] 1/50
-     ["ü" "n"] 1/50
-     }
-    simple-subst))
+   {["t" "e"] 1/50
+    ["k" "t"] 1/50
+    ["m" "a"] 1/50
+    ["c" "n"] 1/50
+    ["h" "d"] 1/50
+    ["N" "n"] 1/50
+    ["m" "zu"] 1/100
+    ["n" "m"] 1/50
+    ["m" "u"] 1/50
+    ["il" "n"] 1/100
+    ["n?" "m"] 1/100
+    ["v" "p"] 1/50
+    ["w" "o"] 1/50
+    ["n:" "m"] 1/100
+    ["c" "a"] 1/50
+    ["m" "en"] 1/100
+    ["n" "ü"] 1/50
+    ["ü" "n"] 1/50
+    }
+   simple-subst))
 
 
 (defn generate-cheater-dict []
@@ -859,9 +860,9 @@
                [k (/ v word-count)]))))
 
 #_(def cheater-dict (dissoc (generate-cheater-dict)
-                          "iu"
-                          "nnd"
-                          "uud"))
+                            "iu"
+                            "nnd"
+                            "uud"))
 
 (def alphabet "abcdefghijklmnopqrstuvwxyzüäöß'")
 (def alphabet "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ")
@@ -885,24 +886,24 @@
 
 (defn get-errors [cat-key error-key correction-statistic base-directory]
   (mapcat (fn [fcs]
-         (let [gt (slurp (clojure.java.io/file base-directory "ground-truth" (first (:pages fcs))))
-               ocr (slurp (clojure.java.io/file base-directory "ocr-results" (first (:pages fcs))))]
-           (as-> fcs x
-                 (cat-key x)
-                 (group-by last x)
-                 (get x error-key)
-                 (map first x)
-                 (ec/error-words gt ocr x))))
+            (let [gt (slurp (clojure.java.io/file base-directory "ground-truth" (first (:pages fcs))))
+                  ocr (slurp (clojure.java.io/file base-directory "ocr-results" (first (:pages fcs))))]
+              (as-> fcs x
+                (cat-key x)
+                (group-by last x)
+                (get x error-key)
+                (map first x)
+                (ec/error-words gt ocr x))))
           correction-statistic))
 
 #_(def gerrit-cleaned-dict-1800+
-  (dissoc (read-dict "resources/output.merged-1800+.fuwv")
-          "nnd"))
+    (dissoc (read-dict "resources/output.merged-1800+.fuwv")
+            "nnd"))
 
 
 #_(binding [*out* (clojure.java.io/writer "/home/kima/dummyoutput.txt")]
-  (evaluate-algorithm 
-   (assoc dta2 :dict cheater-dict :prefixes cheater-prfx :substs new-sim)))
+    (evaluate-algorithm 
+     (assoc dta2 :dict cheater-dict :prefixes cheater-prfx :substs new-sim)))
 (defn write-to [vlids texts dir]
   (doseq [[vlid text] (map vector vlids texts)]
     (spit (clojure.java.io/file dir (str vlid ".txt")) text)))
@@ -942,9 +943,9 @@
   "page as string"
   [page]
   (->> page
-      ((comp #(.split % "[^abcdefghijklmnopqrstuvwxyzäöüßABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ]")
-             #(.replaceAll (.replace (.replace % "-\n" "") "¬\n" "") "[?!.,:]" "")))
-      (remove empty?)))
+       ((comp #(.split % "[^abcdefghijklmnopqrstuvwxyzäöüßABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ]")
+              #(.replaceAll (.replace (.replace % "-\n" "") "¬\n" "") "[?!.,:]" "")))
+       (remove empty?)))
 
 
 (defn page-statistic
@@ -996,43 +997,43 @@
 
 (comment
   (def processed
-                  (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
-                       file-seq
-                       rest
-                       (map (memfn getName))
-                       (map #(.substring % 0 (- (count %) 4)))
-                       (map #(Integer/parseInt %))))
+    (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
+         file-seq
+         rest
+         (map (memfn getName))
+         (map #(.substring % 0 (- (count %) 4)))
+         (map #(Integer/parseInt %))))
   (do (def processed
-                  (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
-                       file-seq
-                       rest
-                       (map (memfn getName))
-                       (map #(.substring % 0 (- (count %) 4)))
-                       (map #(Integer/parseInt %))))
-                    
-                    (def remaining (clojure.set/difference (into #{} grenzbote-vlids) (into #{} processed)))
-                    
-                    [(count remaining)
-                    (double (* 100 (/ (- (count grenzbote-vlids) (count remaining) ) (count grenzbote-vlids))))])
+        (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
+             file-seq
+             rest
+             (map (memfn getName))
+             (map #(.substring % 0 (- (count %) 4)))
+             (map #(Integer/parseInt %))))
+      
+      (def remaining (clojure.set/difference (into #{} grenzbote-vlids) (into #{} processed)))
+      
+      [(count remaining)
+       (double (* 100 (/ (- (count grenzbote-vlids) (count remaining) ) (count grenzbote-vlids))))])
 
   (defn ex-watcher [] (try @f (catch Exception e (do (def processed
-                  (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
-                       file-seq
-                       rest
-                       (map (memfn getName))
-                       (map #(.substring % 0 (- (count %) 4)))
-                       (map #(Integer/parseInt %))))
-                    
-                    (def remaining (clojure.set/difference (into #{} grenzbote-vlids) (into #{} processed)))
-                    
-                    [(count remaining)
-                    (double (* 100 (/ (- (count grenzbote-vlids) (count remaining) ) (count grenzbote-vlids))))]
-                    (def idiot (Integer/parseInt (second (re-find #"fulltext/fr/([0-9]+)" (.getMessage e)))))
-                    (def wrong-vlids (clojure.set/union wrong-vlids #{idiot}))
-                    (spit "wrong-vlids.edn" (pr-str wrong-vlids))
-                    (def remaining-filtered (clojure.set/difference remaining wrong-vlids))
-                    (def f (future (generate-site-statistic dict remaining-filtered "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/") ))
-                    (ex-watcher))))))
+                                                       (->> (io/file "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/")
+                                                            file-seq
+                                                            rest
+                                                            (map (memfn getName))
+                                                            (map #(.substring % 0 (- (count %) 4)))
+                                                            (map #(Integer/parseInt %))))
+                                                     
+                                                     (def remaining (clojure.set/difference (into #{} grenzbote-vlids) (into #{} processed)))
+                                                     
+                                                     [(count remaining)
+                                                      (double (* 100 (/ (- (count grenzbote-vlids) (count remaining) ) (count grenzbote-vlids))))]
+                                                     (def idiot (Integer/parseInt (second (re-find #"fulltext/fr/([0-9]+)" (.getMessage e)))))
+                                                     (def wrong-vlids (clojure.set/union wrong-vlids #{idiot}))
+                                                     (spit "wrong-vlids.edn" (pr-str wrong-vlids))
+                                                     (def remaining-filtered (clojure.set/difference remaining wrong-vlids))
+                                                     (def f (future (generate-site-statistic dict remaining-filtered "/home/kima/programming/grenzbote-files/grenzbote/site-statistics/") ))
+                                                     (ex-watcher))))))
 
 
 (defn generate-entity-statistics
@@ -1091,8 +1092,8 @@
         ocr (map slurp (ec/get-files-sorted (io/file base-directory "ocr-results")))
         error-codes (map (comp read-string slurp) (ec/get-files-sorted (io/file base-directory "edits")))
         error-types (mapcat (fn [gt ocr edits]
-                         (map #(second (ec/augment-error-code gt ocr %)) edits))
-                       gt ocr error-codes)]
+                              (map #(second (ec/augment-error-code gt ocr %)) edits))
+                            gt ocr error-codes)]
     (sort-by second (frequencies error-types))))
 ;; (def error-type-frequencies (error-type-statistic "/home/noelte/clojure/ocr-engine-results/abby-more-text/"))
 ;; suub.bote.dict> (spit "error-type-frequencies.edn" (pr-str error-type-frequencies))
@@ -1100,8 +1101,8 @@
 (defn sorted-error-number-deltas [base-directory-ocr base-directory-corrected]
   (let [ocr-files (ec/get-files-sorted (io/file base-directory-ocr "edits"))
         corr-files (ec/get-files-sorted (io/file base-directory-corrected "edits"))
-        ; list-vlid-error-number-ocr (map (fn [x] [(first  (string/split (.getName x) #"\.")) (count (read-string (slurp x)))]) ocr-files)
-        ; list-vlid-error-number-corr (map (fn [x] [(first  (string/split (.getName x) #"\.")) (count (read-string (slurp x)))]) corr-files)
+                                        ; list-vlid-error-number-ocr (map (fn [x] [(first  (string/split (.getName x) #"\.")) (count (read-string (slurp x)))]) ocr-files)
+                                        ; list-vlid-error-number-corr (map (fn [x] [(first  (string/split (.getName x) #"\.")) (count (read-string (slurp x)))]) corr-files)
 
         list-vlid-error-deltas (map (fn [ocr corr] 
                                       [(first  (string/split (.getName ocr) #"\."))
@@ -1133,72 +1134,122 @@
      :prefixes (prefixes dict)
      :substs substs}))
 
-(comment 1 : to run
- (def f (future (def res (binding [*out* (clojure.java.io/writer "status.txt")]
-                  (evaluate-algorithm
-                 (get-current-params)
-                 "/home/noelte/clojure/ocr-engine-results/<start-dir>"
-                 "/home/noelte/clojure/ocr-engine-results/<result-dir>"
-                 num-pages)))))
+(defn normalize [text]
+  (-> text
+      (.replace "¬\n" "")
+      (.replace "—" "-")
+      (.replace "“" "\"")))
+
+(defn raw-to-analyzed [params raw-dir output-dir]
+  (.mkdirs (io/file output-dir))
+  (.mkdir (io/file output-dir "edits"))
+  (.mkdir (io/file output-dir "ground-truth"))
+  (.mkdir (io/file output-dir "ocr-results"))
+  (doseq [f (ec/get-files-sorted (io/file raw-dir "ground-truth"))]
+    (spit (io/file output-dir "ground-truth" (.getName f))
+          (-> f slurp normalize)))
+  (doseq [f (ec/get-files-sorted (io/file raw-dir "ocr-results"))]
+    (spit (io/file output-dir "ocr-results" (.getName f))
+          (-> f slurp normalize)))
+  (ec/deploy-error-codes output-dir)
+  (spit (io/file output-dir "statistics.edn")
+        (ec/gen-statistics-for-base-directories [output-dir]))
+  (spit (io/file output-dir "word-statistics.edn")
+        (ec/gen-word-statistics-for-base-directories [output-dir])))
+
+(defn analyzed-to-postcorrected [params analyzed-dir output-dir]
+  (evaluate-algorithm params analyzed-dir output-dir Integer/MAX_VALUE))
+
+(defn all-raw-to-postcorrected [params raw-dir output-dir]
+  (doseq [name (.list (io/file raw-dir))]
+    (println "now " name " to analyzed")
+    (raw-to-analyzed params
+                     (io/file raw-dir name)
+                     (io/file output-dir "analyzed" name))
+    (println "now " name " to postcorrected")
+    (analyzed-to-postcorrected params
+                               (io/file output-dir "analyzed" name)
+                               (io/file output-dir "postcorrected" name)))) 
+
+(defn report-evaluations
+  ([raw-input-folder]
+   (let [params (get-current-params)]
+     (all-raw-to-postcorrected params (io/file raw-input-folder)
+                               (io/file (.getParent (io/file raw-input-folder))
+                                        (str "results-" (java.util.Date.)))))))
 
 
 
 
 
- (def f (future
-          (do 
-            (nummer 1)
-            (spit "progess"  "nummer 1 erledigt" :append true)
-            (nummer 2)))))
 
-(comment 2 : to run 
-zum alles Evaluieren
-suub.bote.dict> (def f (future (do 
-                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
-                  (evaluate-algorithm
-                 (get-current-params)
-                 "/home/noelte/clojure/ocr-engine-results/abby-neu-neue-seiten-ohne-schrottseiten"
-                 "/home/noelte/clojure/ocr-engine-results/abby-neu-neu-seiten-ohne-schrottseiten-unser-algorithmus-7.4.2015"
-                 152)))
-                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
-                  (evaluate-algorithm
-                 (get-current-params)
-                 "/home/noelte/clojure/ocr-engine-results/1870-abby"
-                 "/home/noelte/clojure/ocr-engine-results/1870-abby-unser-algorithmus-7.4.2015"
-                 10)))
-                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
-                  (evaluate-algorithm
-                 (get-current-params)
-                 "/home/noelte/clojure/ocr-engine-results/1900-abby"
-                 "/home/noelte/clojure/ocr-engine-results/1900-abby-unser-algorithmus-7.4.2015"
-                 8)))
-                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
-                  (evaluate-algorithm
-                 (get-current-params)
-                 "/home/noelte/clojure/ocr-engine-results/abby-more-text-ohne-schrottseiten"
-                 "/home/noelte/clojure/ocr-engine-results/abby-more-text-ohne-schrottseiten-unser-algorithmus-7.4.2015"
-                 352))))))
----------------------------------
-Mail:
-
-(def res (generate-single-entity-statistics "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus" (read-string (slurp "entities.edn"))))
-                      (spit "line-statistics-ocr-verbessert.edn" (pr-str res))
-
- (def res (generate-single-entity-statistics
- "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"
- (read-string (slurp "entities.edn"))
- 1))
-
-(spit "entity-statistics-ocr-verbessert-fehler-1.edn" (pr-str res))
----------------------------------
-(def f (future (do 
-                      (def res (generate-single-entity-statistics
-                                "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"
-                                (read-string (slurp "entities.edn"))
-                                1))
-
-                      (spit "entity-statistics-ocr-verbessert-fehler-1.edn" (pr-str res)))))
+(comment 1  to run
+         (def f (future (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                                   (evaluate-algorithm
+                                    (get-current-params)
+                                    "/home/noelte/clojure/ocr-engine-results/<start-dir>"
+                                    "/home/noelte/clojure/ocr-engine-results/<result-dir>"
+                                    num-pages)))))
 
 
 
-)
+
+
+         (def f (future
+                  (do 
+                    (nummer 1)
+                    (spit "progess"  "nummer 1 erledigt" :append true)
+                    (nummer 2)))))
+
+
+(comment 2  to run 
+         zum alles Evaluieren
+         suub.bote.dict> (def f (future (do 
+                                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                                                     (evaluate-algorithm
+                                                      (get-current-params)
+                                                      "/home/noelte/clojure/ocr-engine-results/abby-neu-neue-seiten-ohne-schrottseiten"
+                                                      "/home/noelte/clojure/ocr-engine-results/abby-neu-neu-seiten-ohne-schrottseiten-unser-algorithmus-7.4.2015"
+                                                      152)))
+                                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                                                     (evaluate-algorithm
+                                                      (get-current-params)
+                                                      "/home/noelte/clojure/ocr-engine-results/1870-abby"
+                                                      "/home/noelte/clojure/ocr-engine-results/1870-abby-unser-algorithmus-7.4.2015"
+                                                      10)))
+                                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                                                     (evaluate-algorithm
+                                                      (get-current-params)
+                                                      "/home/noelte/clojure/ocr-engine-results/1900-abby"
+                                                      "/home/noelte/clojure/ocr-engine-results/1900-abby-unser-algorithmus-7.4.2015"
+                                                      8)))
+                                          (def res (binding [*out* (clojure.java.io/writer "status.txt")]
+                                                     (evaluate-algorithm
+                                                      (get-current-params)
+                                                      "/home/noelte/clojure/ocr-engine-results/abby-more-text-ohne-schrottseiten"
+                                                      "/home/noelte/clojure/ocr-engine-results/abby-more-text-ohne-schrottseiten-unser-algorithmus-7.4.2015"
+                                                      352))))))
+
+         Mail
+
+         (def res (generate-single-entity-statistics "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus" (read-string (slurp "entities.edn"))))
+         (spit "line-statistics-ocr-verbessert.edn" (pr-str res))
+
+         (def res (generate-single-entity-statistics
+                   "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"
+                   (read-string (slurp "entities.edn"))
+                   1))
+
+         (spit "entity-statistics-ocr-verbessert-fehler-1.edn" (pr-str res))
+         ---------------------------------
+         (def f (future (do 
+                          (def res (generate-single-entity-statistics
+                                    "/home/noelte/clojure/ocr-engine-results/abby-more-text-unser-algorithmus"
+                                    (read-string (slurp "entities.edn"))
+                                    1))
+
+                          (spit "entity-statistics-ocr-verbessert-fehler-1.edn" (pr-str res)))))
+
+
+
+         )
