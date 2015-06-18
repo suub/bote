@@ -963,12 +963,12 @@
 (defn site-statistic [dict vlid]
   (page-statistic dict (le/abby-plaintext vlid)))
 
-(def grenzbote-vlids
+(comment (def grenzbote-vlids
   (for [jg le/jg-docs
         vol (le/volume-docs jg)
         artcl (le/select-article vol)
         vlid (article-vlids artcl)]
-    vlid))
+    vlid)) )
 
 (defn save-vlids []
   (spit "vlids-scraper.edn" (pr-str (into [] grenzbote-vlids))))
@@ -1178,10 +1178,53 @@
                                (io/file (.getParent (io/file raw-input-folder))
                                         (str "results-" (java.util.Date.)))))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;  MN  18.06.2015
+
+(def results-dir "/home/noelte/clojure/ocr-engine-results/results-Thu May 28 22:49:13 CEST 2015/analyzed/abby-more-text-ohne-schrottseiten/")
+
+; map ueber alle Dateien in results-dir
+(defn analyze-all-files []
+)
+
+; analysiere z.B. in edits/179392.txt
+;    ([[8 1] [0 0]] [[8 1] [0 1]] [[8 1] [0 2]] [[8 1] [0 3]].....
+; die Daten in Bezug auf Fehlertyp (Satzzeichen, Ziffer, ...)
+; AUFRUF: (analyze-file (clojure.string/join [results-dir "edits/179392.txt"]))
+(defn analyze-file [file]
+  (edn/read-string (slurp file))
+  ; soetwas wie "(filter pred coll)"  ... (filter #(= [[4 8] [1849 1872]] %) tmp)    mit destructuring
+)
+
+(defn error-matrix-for-vlid [base-directory vlid]
+  (let [ocr (slurp (io/file base-directory "ocr-results" (str vlid ".txt")))
+        ground-truth (slurp (io/file base-directory "ground-truth" (str vlid ".txt")))
+        edits (read-string (slurp (io/file base-directory "edits" (str vlid ".txt"))))
+        matrix-entries (mapcat
+                        #(ec/error-code-to-matrix-entries (ec/augment-error-code ground-truth ocr %1)) edits) ]
+    (frequencies matrix-entries)))
 
 
+(defn get-vlids-from-base-directory [base-directory]
+  (map #(Integer/parseInt ( first (string/split %1 #"\."))) 
+       (map #(.getName %1) (ec/get-files-sorted (io/file base-directory "ground-truth/")))))
+
+(defn create-vlid-matrix-entries-map [base-directory]
+  (->> base-directory
+       get-vlids-from-base-directory
+       (map (fn [vlid] [vlid (error-matrix-for-vlid base-directory vlid)]))
+       (into {})))
 
 
+(defn sort-vlids-by-entry-count [matrix-type vlid-matrix-entry-map]
+  (sort-by (fn [[vlid matrix-entry-map]]
+             (matrix-entry-map matrix-type))
+           vlid-matrix-entry-map))
+
+#_ (sort-vlids-by-entry-count [4 8] (create-vlid-matrix-entries-map base-directory))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment 1  to run
          (def f (future (def res (binding [*out* (clojure.java.io/writer "status.txt")]
