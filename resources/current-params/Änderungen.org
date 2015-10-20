@@ -23,10 +23,7 @@
 1	adi	adi	adi
 1	petito	petito	petito
 1	Dog	Dog	Dog
-4.06.15
-- c zu r eingefügt 
-- r zu e eingefügt
-- einige Wörter ins dictionary eingefügt
+ 
  
 
  

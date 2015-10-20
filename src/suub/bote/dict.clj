@@ -969,7 +969,7 @@
         artcl (le/select-article vol)
         vlid (article-vlids artcl)]
     vlid)) )
-
+(comment
 (defn save-vlids []
   (spit "vlids-scraper.edn" (pr-str (into [] grenzbote-vlids))))
 
@@ -977,7 +977,7 @@
 (def grenzbote-vlids
   (clojure.set/difference
    (read-string (slurp "vlids-maik+mn.edn"))
-   (read-string (slurp "maik-ohne-mn.edn"))))
+   (read-string (slurp "maik-ohne-mn.edn")))))
 
 (defn generate-site-statistic [dict vlids dir]
   (doseq [vlid vlids]
