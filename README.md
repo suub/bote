@@ -4,6 +4,6 @@ A collection of tools used in the grenzboten digitization project.
 
 ## License
 
-Copyright © 2013 SUUB Bremen
+Copyright © 2013-2016 Staats- und Universitätsbibliothek Bremen
 
-Distributed under the Eclipse Public License, the same as Clojure.
+Distributed under the MIT License.
